@@ -167,6 +167,14 @@
     }
   },
   
+  "evidence": {
+    "required": true,
+    "min_files_changed": 1,
+    "excluded_paths": ["system/", ".agents/", "node_modules/", ".git/", "dist/", "build/", ".next/"],
+    "tracked_extensions": [".tsx", ".ts", ".js", ".jsx", ".css", ".scss", ".html", ".vue", ".svelte", ".json", ".md", ".py", ".go", ".rs", ".cs", ".php"],
+    "project_root": null
+  },
+
   "review_criteria": {
     "min_pass_score": 7,
     "require_tests": true,

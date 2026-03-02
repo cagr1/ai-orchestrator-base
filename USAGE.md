@@ -1,7 +1,7 @@
 # Guia Operativa (Terminal + Chat Kilo.ai)
 
-Este sistema NO ejecuta Planner/Executor/QA/Reviewer por si solo.
-El runner solo orquesta estado y te dice que agente ejecutar.
+Este sistema orquesta estado Y verifica ejecucion real.
+El runner gestiona el flujo y **verifica hashes de archivos** para asegurar que cada tarea hizo cambios reales.
 
 Tu trabajo siempre alterna entre:
 1. Terminal
@@ -9,25 +9,62 @@ Tu trabajo siempre alterna entre:
 
 ---
 
+## REGLAS INQUEBRANTABLES
+
+> Estas reglas aplican a TODOS los agentes y NO pueden ser ignoradas.
+
+1. **El runner crea snapshots** de archivos del proyecto ANTES de cada tarea
+2. **El runner compara hashes** DESPUES de que el executor dice `executor:done`
+3. **Si no hay cambios reales** en archivos del proyecto → `executor:done` es **RECHAZADO**
+4. **QA verifica** que `system/evidence/{task_id}.json` existe con cambios reales
+5. **Reviewer verifica** que las reglas del skill fueron aplicadas en el codigo
+6. **No hay forma de saltarse** esta verificacion — es automatica via hashes MD5
+
+---
+
+## Prerequisito: Configurar project_root
+
+**ANTES de iniciar cualquier run**, configura el directorio del proyecto en `system/config.json`:
+
+```json
+{
+  "evidence": {
+    "required": true,
+    "min_files_changed": 1,
+    "project_root": "E:\\Carlos\\Development Tools\\Proyectos\\TuProyecto"
+  }
+}
+```
+
+Sin `project_root`, el sistema de evidencia no puede verificar cambios.
+
+---
+
 ## Flujo Correcto
 
-`init -> planner -> executor -> qa -> reviewer -> memory -> repeat`
+`init -> planner -> executor(+evidence) -> qa(+evidence) -> reviewer(+skill) -> memory -> repeat`
 
 - `init` y control de estado: Terminal
 - `planner/executor/qa/reviewer/memory`: Chat de Kilo.ai
 
 ### Modo Chat-Only (recomendado)
 
-Si quieres usar TODO desde el chat (sin cambiar manualmente entre terminal/chat), pide a Kilo.ai que ejecute comandos y edite archivos en bucle.
-
 Prompt recomendado:
 
 ```text
-Trabaja en E:\\Carlos\\Development Tools\\Proyectos\\Ehdu\\.agents.
-1) Ejecuta: node runner.js start "Execute plans/premium-upgrade-plan.md for EHDU in phases, preserving design and optimizing performance."
-2) Lee la salida del runner y ejecuta la accion requerida (Planner/Executor/QA/Reviewer/Memory).
+Trabaja en {PROJECT_PATH}\.agents.
+
+REGLAS INQUEBRANTABLES:
+- El runner verifica hashes de archivos antes y despues de cada tarea
+- Si dices executor:done pero no cambiaste archivos, el token es RECHAZADO
+- DEBES hacer cambios REALES en el proyecto
+- DEBES leer y aplicar el skill file asignado
+- Sin evidence = qa:fail y review:fail automaticos
+
+1) Ejecuta: node runner.js start "{GOAL}"
+2) Lee la salida del runner y ejecuta la accion requerida
 3) Despues de cada accion, ejecuta: node runner.js next
-4) Repite hasta phase=complete o halted=true.
+4) Repite hasta phase=complete o halted=true
 5) Al final muestra resumen con:
    - node runner.js status
    - system/runs/<run_id>/summary.md
@@ -35,50 +72,34 @@ Trabaja en E:\\Carlos\\Development Tools\\Proyectos\\Ehdu\\.agents.
 
 ---
 
-## Requisitos Previos
-
-1. Copia la carpeta del sistema en tu proyecto (por ejemplo `.agents`).
-2. Entra a esa carpeta antes de ejecutar comandos.
-3. Asegura que exista `system/` con `goal.md`, `state.json`, `plan.md`, `tasks.md`, `memory.md`.
-
-Ejemplo:
-
-```bash
-cd "E:\Carlos\Development Tools\Proyectos\Ehdu\.agents"
-```
-
----
-
 ## Paso a Paso (Obligatorio)
 
-## Paso 1: Inicializar run
+## Paso 1: Configurar project_root
+
+En `system/config.json`, agregar:
+```json
+"evidence": {
+  "project_root": "ruta/a/tu/proyecto"
+}
+```
+
+## Paso 2: Inicializar run
 
 En Terminal:
 
 ```bash
-node scripts/init-project.js "Tu objetivo del proyecto"
-```
-
-Alternativa directa (init + primera accion en un comando):
-
-```bash
 node runner.js start "Tu objetivo del proyecto"
-```
-
-Ejemplo:
-
-```bash
-node scripts/init-project.js "Execute plans/premium-upgrade-plan.md for EHDU in phases, preserving design and optimizing performance."
 ```
 
 Resultado esperado:
 - Se actualiza `system/goal.md`
 - Se resetean `system/plan.md` y `system/tasks.md`
 - Se crea nuevo `run_id` en `system/state.json`
+- Se muestra warning si `project_root` no esta configurado
 
 ---
 
-## Paso 2: Ver estado
+## Paso 3: Ver estado
 
 En Terminal:
 
@@ -89,33 +110,20 @@ node runner.js status
 Debes ver:
 - `phase: planning`
 - `awaiting_agent: planner`
-
----
-
-## Paso 3: Pedir siguiente accion
-
-En Terminal:
-
-```bash
-node runner.js next
-```
-
-El runner te dira algo como:
-- `[ACTION] ... Planner Agent ...`
-
-Aqui TERMINA el trabajo del terminal por ahora.
+- `evidence_required: true`
+- `project_root: /ruta/a/tu/proyecto`
 
 ---
 
 ## Paso 4: Ejecutar Planner en Chat Kilo.ai
 
-En chat Kilo.ai (no en terminal), pide:
+En chat Kilo.ai:
 
 ```text
 Actua como Planner Agent.
 Lee:
 - system/goal.md
-- (si aplica) plans/premium-upgrade-plan.md del proyecto
+- system/config.json (para ver skills disponibles y tier)
 
 Genera:
 1) system/plan.md
@@ -130,119 +138,109 @@ Reglas de tasks.md:
 - resultado inicial: -
 ```
 
-Importante:
-- Si `tasks.md` no cumple schema, el runner hace HALT.
-
 ---
 
 ## Paso 5: Volver a Terminal
-
-En Terminal:
 
 ```bash
 node runner.js next
 ```
 
-Ahora el runner debe pedir Executor para una tarea.
+El runner:
+1. Detecta plan y tasks generados
+2. Selecciona primera tarea pending
+3. **Crea pre-snapshot** de archivos del proyecto
+4. Pide Executor para la tarea
 
 ---
 
 ## Paso 6: Ejecutar Executor en Chat Kilo.ai
 
-En chat Kilo.ai:
-
 ```text
 Actua como Executor Agent.
-Lee system/tasks.md y toma la tarea pending indicada por el runner.
-Ejecuta la tarea con su skill asignado.
-Actualiza esa fila en tasks.md:
-- estado: running (o done si tu flujo interno lo requiere)
-- resultado: agrega token executor:done
+Lee system/tasks.md y toma la tarea indicada por el runner.
 
-No cierres la tarea todavia.
+OBLIGATORIO:
+1. Lee el skill file asignado COMPLETO
+2. Haz cambios REALES en archivos del proyecto
+3. Lista todos los archivos que modificaste/creaste
+4. Actualiza tasks.md con executor:done
+
+RECUERDA: El runner verifica hashes. Si no hay cambios reales, executor:done sera rechazado.
 ```
 
 ---
 
-## Paso 7: Volver a Terminal y pedir QA
-
-En Terminal:
+## Paso 7: Volver a Terminal
 
 ```bash
 node runner.js next
 ```
 
-Si ve `executor:done`, te pedira QA.
+El runner:
+1. Crea post-snapshot y compara hashes
+2. Si hay cambios reales → acepta `executor:done` → pide QA
+3. **Si NO hay cambios** → RECHAZA `executor:done` → pide Executor de nuevo
 
 ---
 
 ## Paso 8: Ejecutar QA en Chat Kilo.ai
 
-En chat Kilo.ai:
-
 ```text
 Actua como QA Agent para la tarea actual.
-Valida output y actualiza tasks.md en resultado:
-- qa:pass  (si pasa)
-- qa:fail  (si falla)
+PRIMERO: Lee system/evidence/{task_id}.json
+Si no existe o tiene 0 cambios → qa:fail inmediato.
+Si existe: inspecciona los archivos cambiados y valida calidad.
+Actualiza tasks.md: qa:pass o qa:fail
 ```
 
 ---
 
 ## Paso 9: Volver a Terminal y pedir Reviewer
 
-En Terminal:
-
 ```bash
 node runner.js next
 ```
-
-Si ve `qa:pass`, te pedira Reviewer.
 
 ---
 
 ## Paso 10: Ejecutar Reviewer en Chat Kilo.ai
 
-En chat Kilo.ai:
-
 ```text
 Actua como Reviewer Agent para la tarea actual.
-Evalua y actualiza tasks.md en resultado:
-- review:pass(score=X)
-- review:fail(score=X)
+PRIMERO: Lee system/evidence/{task_id}.json
+SEGUNDO: Lee el skill file asignado
+Verifica que las reglas del skill fueron aplicadas en el codigo.
+Actualiza tasks.md: review:pass(score=X) o review:fail(score=X)
 ```
 
 ---
 
 ## Paso 11: Memory (cierre de tarea)
 
-En Terminal:
-
 ```bash
 node runner.js next
 ```
 
-Si ve `review:pass`, te pedira escribir memory.
-
-En chat Kilo.ai agrega en `system/memory.md` una entrada que incluya el `task_id`.
-
-Ejemplo:
+En chat Kilo.ai agrega en `system/memory.md` una entrada que incluya:
+- El `task_id`
+- Los archivos cambiados (de evidence.json)
+- Las decisiones tecnicas
 
 ```markdown
-### T001 2026-03-02 - reviewer
+### T001 2026-03-02 - executor
 **Decision:** ...
+**Archivos cambiados:** src/components/HeroSection.tsx, src/styles/hero.css
+**Skill aplicado:** frontend-design-taste
 **Razon:** ...
 **Alternativas descartadas:** ...
 **Impacto en tareas futuras:** ...
 ```
 
-Luego vuelve a Terminal:
-
+Luego:
 ```bash
 node runner.js next
 ```
-
-El runner cerrara la tarea como `done` y seguira con la siguiente.
 
 ---
 
@@ -250,33 +248,50 @@ El runner cerrara la tarea como `done` y seguira con la siguiente.
 
 Repite pasos 6 a 11 hasta completar todas las tareas.
 
-Cuando termine:
-- `phase: complete`
-- Se genera `system/runs/<run_id>/summary.md`
-
 ---
 
 ## Comandos de Control
 
 ```bash
-node runner.js init "objetivo"   # Inicializa run limpio
-node runner.js start "objetivo"  # Init + ejecuta primer next
-node runner.js status              # Estado actual
-node runner.js next                # Ejecuta solo 1 paso
-node runner.js "objetivo"         # Run completo (seguira pidiendo acciones)
+node runner.js init "objetivo"     # Inicializa run limpio
+node runner.js start "objetivo"    # Init + ejecuta primer next
+node runner.js status              # Estado actual (incluye evidence info)
+node runner.js next                # Ejecuta solo 1 paso (con verificacion de evidence)
+node runner.js "objetivo"          # Run completo
 node scripts/smoke-runner.js       # Smoke tests del sistema
 ```
 
 ---
 
+## Sistema de Evidence
+
+Cada tarea genera archivos en `system/evidence/`:
+
+```
+system/evidence/
+  T001-pre.json     # Hashes de archivos ANTES de ejecutar
+  T001.json         # Diff: archivos cambiados/creados/eliminados
+  T002-pre.json
+  T002.json
+```
+
+El runner usa estos archivos para:
+1. Verificar que el executor hizo cambios reales
+2. Proveer a QA y Reviewer la lista de archivos a inspeccionar
+3. Registrar evidencia auditable de cada tarea
+
+---
+
 ## Troubleshooting Rapido
 
-## Error: "Cannot find module scripts/init-project.js"
-- Estas en el directorio equivocado.
-- Entra a `.agents` y ejecuta ahi.
+## Error: "executor:done REJECTED — no file changes detected"
+- El executor no hizo cambios reales en archivos del proyecto
+- Verifica que `evidence.project_root` en config.json apunta al proyecto correcto
+- El executor debe modificar/crear archivos `.tsx`, `.ts`, `.js`, `.css`, etc.
 
-## Error: "require is not defined in ES module scope"
-- Falta `package.json` dentro de `.agents` con `"type": "commonjs"`.
+## Error: "No project_root configured"
+- Agrega `evidence.project_root` en `system/config.json`
+- Debe ser la ruta absoluta al directorio del proyecto
 
 ## HALT: invalid_tasks_schema
 - Corrige `system/tasks.md`:
@@ -284,17 +299,13 @@ node scripts/smoke-runner.js       # Smoke tests del sistema
   - IDs validos `T001...`
   - estados validos
   - sin duplicados
-  - dependencias validas si existen
 
 ## No avanza a siguiente agente
-- Revisa tokens en `resultado` de la tarea:
-  - `executor:done`
-  - `qa:pass` o `qa:fail`
-  - `review:pass(score=X)` o `review:fail(score=X)`
+- Revisa tokens en `resultado` de la tarea
+- Revisa `system/evidence/{task_id}.json` existe
 
 ---
 
 ## Regla de Oro
 
-Si el runner dice `[ACTION]`, esa accion se ejecuta en el chat de Kilo.ai.
-Despues siempre vuelves a Terminal y corres `node runner.js next`.
+> El runner es el gatekeeper. Ningun token es aceptado sin evidencia verificable por el sistema de archivos. El LLM no puede auto-certificar completitud — el file system es la fuente de verdad.

@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 
 /**
- * Agent System Runner
+ * Agent System Runner v2.0
  *
  * Comando: node runner.js "Build mini ecommerce static catalog with filters"
  *
  * Flujo estandar: goal -> planner -> tasks -> executor -> qa -> reviewer -> memory -> repeat
+ *
+ * UNBREAKABLE RULE: No task can be marked as done without file-system evidence
+ * of real changes in the target project directory.
  */
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const ROOT_DIR = __dirname;
 const SYSTEM_DIR = path.join(ROOT_DIR, 'system');
@@ -20,6 +24,7 @@ const MEMORY_FILE = path.join(SYSTEM_DIR, 'memory.md');
 const STATE_FILE = path.join(SYSTEM_DIR, 'state.json');
 const CONFIG_FILE = path.join(SYSTEM_DIR, 'config.json');
 const RUNS_DIR = path.join(SYSTEM_DIR, 'runs');
+const EVIDENCE_DIR = path.join(SYSTEM_DIR, 'evidence');
 
 const readFile = (filepath) => {
   try {
@@ -50,6 +55,179 @@ const ensureDir = (dirPath) => {
   }
 };
 
+// ============================================================
+// EVIDENCE SYSTEM — File-change tracking for anti-skip guards
+// ============================================================
+
+const TRACKED_EXTENSIONS = new Set([
+  '.tsx', '.ts', '.js', '.jsx', '.css', '.scss', '.sass', '.less',
+  '.html', '.vue', '.svelte', '.json', '.md', '.mdx',
+  '.py', '.rb', '.go', '.rs', '.java', '.cs', '.php',
+  '.yaml', '.yml', '.toml', '.xml', '.sql', '.graphql',
+  '.env', '.config', '.prisma'
+]);
+
+const EXCLUDED_DIRS = new Set([
+  'node_modules', '.git', '.next', '.nuxt', 'dist', 'build',
+  '.agents', 'system', '.cache', '.turbo', '__pycache__',
+  'coverage', '.nyc_output', '.vscode', '.idea'
+]);
+
+const hashFile = (filepath) => {
+  try {
+    const content = fs.readFileSync(filepath);
+    return crypto.createHash('md5').update(content).digest('hex');
+  } catch (_e) {
+    return null;
+  }
+};
+
+const scanProjectFiles = (dir, config) => {
+  const files = {};
+  if (!dir || !fs.existsSync(dir)) return files;
+
+  const excludedPaths = (config?.evidence?.excluded_paths || []).map(p => p.replace(/\/$/, ''));
+  const trackedExts = config?.evidence?.tracked_extensions
+    ? new Set(config.evidence.tracked_extensions)
+    : TRACKED_EXTENSIONS;
+
+  const walk = (currentDir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch (_e) {
+      return;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+      const relativePath = path.relative(dir, fullPath).replace(/\\/g, '/');
+
+      if (entry.isDirectory()) {
+        if (EXCLUDED_DIRS.has(entry.name)) continue;
+        if (excludedPaths.some(ep => relativePath.startsWith(ep))) continue;
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (trackedExts.has(ext)) {
+          const hash = hashFile(fullPath);
+          if (hash) {
+            files[relativePath] = {
+              hash,
+              size: fs.statSync(fullPath).size,
+              mtime: fs.statSync(fullPath).mtime.toISOString()
+            };
+          }
+        }
+      }
+    }
+  };
+
+  walk(dir);
+  return files;
+};
+
+const createPreSnapshot = (taskId, projectDir, config) => {
+  ensureDir(EVIDENCE_DIR);
+  const files = scanProjectFiles(projectDir, config);
+  const snapshot = {
+    task_id: taskId,
+    type: 'pre',
+    timestamp: new Date().toISOString(),
+    project_dir: projectDir,
+    file_count: Object.keys(files).length,
+    files
+  };
+  writeJSON(path.join(EVIDENCE_DIR, `${taskId}-pre.json`), snapshot);
+  return snapshot;
+};
+
+const createPostSnapshotAndDiff = (taskId, projectDir, config) => {
+  ensureDir(EVIDENCE_DIR);
+  const preFile = path.join(EVIDENCE_DIR, `${taskId}-pre.json`);
+  const pre = readJSON(preFile);
+
+  if (!pre) {
+    return {
+      task_id: taskId,
+      error: 'no_pre_snapshot',
+      total_changes: 0,
+      files_changed: [],
+      files_created: [],
+      files_deleted: [],
+      verified: false
+    };
+  }
+
+  const postFiles = scanProjectFiles(projectDir, config);
+  const filesChanged = [];
+  const filesCreated = [];
+  const filesDeleted = [];
+
+  // Find modified and deleted files
+  for (const [filePath, preInfo] of Object.entries(pre.files)) {
+    if (!postFiles[filePath]) {
+      filesDeleted.push({ path: filePath, action: 'deleted' });
+    } else if (postFiles[filePath].hash !== preInfo.hash) {
+      filesChanged.push({
+        path: filePath,
+        action: 'modified',
+        size_before: preInfo.size,
+        size_after: postFiles[filePath].size
+      });
+    }
+  }
+
+  // Find new files
+  for (const filePath of Object.keys(postFiles)) {
+    if (!pre.files[filePath]) {
+      filesCreated.push({
+        path: filePath,
+        action: 'created',
+        size: postFiles[filePath].size
+      });
+    }
+  }
+
+  const evidence = {
+    task_id: taskId,
+    pre_snapshot: pre.timestamp,
+    post_snapshot: new Date().toISOString(),
+    project_dir: projectDir,
+    files_changed: filesChanged,
+    files_created: filesCreated,
+    files_deleted: filesDeleted,
+    total_changes: filesChanged.length + filesCreated.length + filesDeleted.length,
+    verified: false
+  };
+
+  writeJSON(path.join(EVIDENCE_DIR, `${taskId}.json`), evidence);
+  return evidence;
+};
+
+const readEvidence = (taskId) => {
+  return readJSON(path.join(EVIDENCE_DIR, `${taskId}.json`));
+};
+
+const hasPreSnapshot = (taskId) => {
+  return fs.existsSync(path.join(EVIDENCE_DIR, `${taskId}-pre.json`));
+};
+
+const getProjectRoot = (config) => {
+  return config?.evidence?.project_root || null;
+};
+
+const stripToken = (resultado, tokenPrefix) => {
+  if (!resultado || resultado === '-') return '-';
+  const tokens = resultado.split(';').map(t => t.trim()).filter(Boolean);
+  const filtered = tokens.filter(t => !t.toLowerCase().startsWith(tokenPrefix.toLowerCase()));
+  return filtered.length ? filtered.join('; ') : '-';
+};
+
+// ============================================================
+// CORE SYSTEM FUNCTIONS
+// ============================================================
+
 const snapshotRun = (state, event = 'state_update') => {
   if (!state || !state.run_id) return;
 
@@ -72,6 +250,14 @@ const persistState = (state, event = 'state_update') => {
   snapshotRun(state, event);
 };
 
+const logEvidence = (state, taskId, action, details) => {
+  if (!state || !state.run_id) return;
+  const runDir = path.join(RUNS_DIR, state.run_id);
+  ensureDir(runDir);
+  const line = `${new Date().toISOString()} | ${action} | task=${taskId} | ${details}`;
+  fs.appendFileSync(path.join(runDir, 'events.log'), `${line}\n`, 'utf-8');
+};
+
 const writeRunSummary = (state, tasksParsed) => {
   if (!state || !state.run_id) return;
 
@@ -80,7 +266,11 @@ const writeRunSummary = (state, tasksParsed) => {
   ensureDir(runDir);
 
   const taskLines = tasksParsed && tasksParsed.tasks
-    ? tasksParsed.tasks.map((t) => `- ${t.id} | skill=${t.skill || '-'} | estado=${t.estado} | resultado=${t.resultado || '-'}`)
+    ? tasksParsed.tasks.map((t) => {
+        const ev = readEvidence(t.id);
+        const changes = ev ? ev.total_changes : 0;
+        return `- ${t.id} | skill=${t.skill || '-'} | estado=${t.estado} | resultado=${t.resultado || '-'} | evidence_changes=${changes}`;
+      })
     : [];
 
   const content = [
@@ -91,6 +281,7 @@ const writeRunSummary = (state, tasksParsed) => {
     `- phase: ${state.phase}`,
     `- status: ${state.status}`,
     `- iteration: ${state.iteration}/${state.max_iterations}`,
+    `- evidence_required: ${state.evidence_required}`,
     '',
     '## Metrics',
     `- tasks_total: ${state.metrics.tasks_total}`,
@@ -100,8 +291,9 @@ const writeRunSummary = (state, tasksParsed) => {
     `- qa_fails: ${state.metrics.qa_fails}`,
     `- review_passes: ${state.metrics.review_passes}`,
     `- review_fails: ${state.metrics.review_fails}`,
+    `- evidence_rejections: ${state.metrics.evidence_rejections || 0}`,
     '',
-    '## Task Results',
+    '## Task Results (with evidence)',
     ...(taskLines.length ? taskLines : ['- no tasks found']),
     '',
     '## Task Lists',
@@ -361,7 +553,7 @@ const generateRunId = (goal) => {
 const initializeState = (goal, config) => {
   const runId = generateRunId(goal);
   const state = {
-    version: '1.1',
+    version: '2.0',
     run_id: runId,
     phase: 'planning',
     iteration: 0,
@@ -377,6 +569,7 @@ const initializeState = (goal, config) => {
     last_agent: null,
     last_action: null,
     last_updated: new Date().toISOString(),
+    evidence_required: true, // UNBREAKABLE — cannot be disabled
     metrics: {
       tasks_total: 0,
       tasks_done: 0,
@@ -384,7 +577,8 @@ const initializeState = (goal, config) => {
       review_passes: 0,
       review_fails: 0,
       qa_passes: 0,
-      qa_fails: 0
+      qa_fails: 0,
+      evidence_rejections: 0
     }
   };
 
@@ -410,7 +604,7 @@ const loadSystem = () => {
   };
 };
 
-const printAgentPrompt = (agent, taskId) => {
+const printAgentPrompt = (agent, taskId, extra) => {
   if (agent === 'planner') {
     console.log('[ACTION] Action required: run Planner Agent to generate system/plan.md and system/tasks.md');
     return;
@@ -419,23 +613,40 @@ const printAgentPrompt = (agent, taskId) => {
   if (agent === 'executor') {
     console.log(`[ACTION] Action required: run Executor Agent for ${taskId}`);
     console.log('   Expected token in tasks.resultado: executor:done');
+    console.log('   UNBREAKABLE: You MUST make REAL changes to project source files.');
+    console.log('   UNBREAKABLE: The runner will verify file changes via hash comparison.');
+    console.log('   UNBREAKABLE: If zero project files changed, executor:done is REJECTED.');
+    if (extra?.skill) {
+      console.log(`   Skill assigned: ${extra.skill}`);
+      console.log(`   You MUST read and apply the rules from: skills/${extra.skill.replace(/-/g, '/').replace(/^frontend\//, 'frontend/')}.md`);
+    }
+    if (extra?.rejected) {
+      console.log('   ⚠ PREVIOUS EXECUTION REJECTED — no file changes were detected.');
+      console.log('   You must make actual code changes in the project directory.');
+    }
     return;
   }
 
   if (agent === 'qa') {
     console.log(`[ACTION] Action required: run QA Agent for ${taskId}`);
     console.log('   Expected token in tasks.resultado: qa:pass or qa:fail');
+    console.log('   UNBREAKABLE: You MUST verify system/evidence/${taskId}.json exists and has real changes.');
+    console.log('   UNBREAKABLE: If evidence shows 0 file changes, you MUST qa:fail.');
     return;
   }
 
   if (agent === 'reviewer') {
     console.log(`[ACTION] Action required: run Reviewer Agent for ${taskId}`);
     console.log('   Expected token in tasks.resultado: review:pass(score=X) or review:fail(score=X)');
+    console.log('   UNBREAKABLE: You MUST read the skill file and verify its rules were applied.');
+    console.log('   UNBREAKABLE: You MUST check system/evidence/${taskId}.json for actual changes.');
+    console.log('   UNBREAKABLE: If evidence is missing or empty, review:fail(score=0).');
     return;
   }
 
   if (agent === 'memory') {
     console.log(`[ACTION] Action required: append decision log for ${taskId} in system/memory.md`);
+    console.log('   MUST reference files changed from system/evidence/${taskId}.json');
   }
 };
 
@@ -445,6 +656,13 @@ const markTaskDone = (state, tasksParsed, taskId) => {
 
   target.estado = 'done';
   target.resultado = addToken(target.resultado, 'memory:written');
+
+  // Mark evidence as verified
+  const evidence = readEvidence(taskId);
+  if (evidence) {
+    evidence.verified = true;
+    writeJSON(path.join(EVIDENCE_DIR, `${taskId}.json`), evidence);
+  }
 
   const taskMap = new Map(tasksParsed.tasks.map((t) => [t.id, t]));
   saveTasks(tasksParsed.table, taskMap);
@@ -460,8 +678,62 @@ const markTaskDone = (state, tasksParsed, taskId) => {
   state.metrics.tasks_done = state.completed_tasks.length;
 };
 
+// ============================================================
+// EVIDENCE VALIDATION — The anti-skip gate
+// ============================================================
+
+const validateExecutionEvidence = (taskId, projectDir, config) => {
+  // If no project root configured, we can't validate — warn but don't block
+  if (!projectDir) {
+    console.log('[WARN] No project_root configured in system/config.json evidence section.');
+    console.log('[WARN] Evidence validation SKIPPED — configure evidence.project_root to enable.');
+    return { valid: true, reason: 'no_project_root_configured', warning: true };
+  }
+
+  // Check if pre-snapshot exists
+  if (!hasPreSnapshot(taskId)) {
+    console.log(`[WARN] No pre-snapshot found for ${taskId}. Creating post-snapshot for comparison.`);
+    // If no pre-snapshot, we can't diff — but we can still check if evidence was manually provided
+    const evidence = readEvidence(taskId);
+    if (evidence && evidence.total_changes > 0) {
+      return { valid: true, reason: 'manual_evidence_provided' };
+    }
+    return { valid: false, reason: 'no_pre_snapshot_and_no_evidence' };
+  }
+
+  // Create post-snapshot and diff
+  const evidence = createPostSnapshotAndDiff(taskId, projectDir, config);
+
+  if (evidence.error) {
+    return { valid: false, reason: evidence.error };
+  }
+
+  const minChanges = config?.evidence?.min_files_changed || 1;
+  if (evidence.total_changes < minChanges) {
+    return {
+      valid: false,
+      reason: 'no_file_changes_detected',
+      total_changes: evidence.total_changes,
+      min_required: minChanges
+    };
+  }
+
+  return {
+    valid: true,
+    reason: 'evidence_validated',
+    total_changes: evidence.total_changes,
+    files_changed: evidence.files_changed.length,
+    files_created: evidence.files_created.length,
+    files_deleted: evidence.files_deleted.length
+  };
+};
+
+// ============================================================
+// ORCHESTRATION ENGINE
+// ============================================================
+
 const orchestrate = async (system) => {
-  const { state } = system;
+  const { state, config } = system;
   if (!state) {
     console.log('[ERROR] Missing system/state.json');
     return false;
@@ -498,10 +770,10 @@ const orchestrate = async (system) => {
 
   const tasksParsed = parseTasks(system.tasks || '');
   const planReady = Boolean(system.plan && system.plan.trim());
-  const tasksValidation = tasksParsed ? validateTasks(tasksParsed) : null;
 
   if (state.phase === 'planning') {
-    if (tasksParsed && tasksValidation && !tasksValidation.valid) {
+    if (tasksParsed && validateTasks(tasksParsed) && !validateTasks(tasksParsed).valid) {
+      const tasksValidation = validateTasks(tasksParsed);
       state.halted = true;
       state.halt_reason = 'invalid_tasks_schema';
       state.status = 'halted';
@@ -536,6 +808,8 @@ const orchestrate = async (system) => {
   }
 
   if (state.phase === 'execution') {
+    const tasksValidation = tasksParsed ? validateTasks(tasksParsed) : null;
+
     if (tasksParsed && tasksValidation && !tasksValidation.valid) {
       state.halted = true;
       state.halt_reason = 'invalid_tasks_schema';
@@ -590,13 +864,24 @@ const orchestrate = async (system) => {
         return false;
       }
 
+      // === EVIDENCE: Create pre-snapshot before executor runs ===
+      const projectDir = getProjectRoot(config);
+      if (projectDir) {
+        console.log(`[EVIDENCE] Creating pre-execution snapshot for ${nextTask.id}...`);
+        createPreSnapshot(nextTask.id, projectDir, config);
+        logEvidence(state, nextTask.id, 'pre_snapshot_created', `project_dir=${projectDir}`);
+      } else {
+        console.log('[WARN] No project_root in config.json — evidence tracking disabled.');
+        console.log('[WARN] Set evidence.project_root in system/config.json to enable anti-skip protection.');
+      }
+
       state.current_task_id = nextTask.id;
       state.awaiting_agent = 'executor';
       state.last_agent = 'runner';
       state.last_action = 'task_selected';
       state.last_updated = new Date().toISOString();
       persistState(state);
-      printAgentPrompt('executor', nextTask.id);
+      printAgentPrompt('executor', nextTask.id, { skill: nextTask.skill });
       return false;
     }
 
@@ -616,8 +901,45 @@ const orchestrate = async (system) => {
         state.awaiting_agent = 'executor';
         state.last_updated = new Date().toISOString();
         persistState(state);
-        printAgentPrompt('executor', task.id);
+        printAgentPrompt('executor', task.id, { skill: task.skill });
         return false;
+      }
+
+      // === EVIDENCE GATE: Validate real file changes before accepting executor:done ===
+      const projectDir = getProjectRoot(config);
+      if (projectDir) {
+        const validation = validateExecutionEvidence(task.id, projectDir, config);
+
+        if (!validation.valid) {
+          // REJECT executor:done — strip the token
+          console.log(`[REJECT] executor:done REJECTED for ${task.id} — ${validation.reason}`);
+          console.log('[REJECT] The executor must make REAL changes to project source files.');
+          logEvidence(state, task.id, 'evidence_rejected', `reason=${validation.reason}`);
+
+          // Strip the executor:done token from resultado
+          task.resultado = stripToken(task.resultado, 'executor:done');
+          const taskMap = new Map(tasksParsed.tasks.map((t) => [t.id, t]));
+          saveTasks(tasksParsed.table, taskMap);
+
+          // Increment rejection counter
+          if (!state.metrics.evidence_rejections) state.metrics.evidence_rejections = 0;
+          state.metrics.evidence_rejections++;
+
+          // Re-create pre-snapshot for next attempt
+          console.log(`[EVIDENCE] Re-creating pre-snapshot for ${task.id} retry...`);
+          createPreSnapshot(task.id, projectDir, config);
+
+          state.awaiting_agent = 'executor';
+          state.last_agent = 'runner';
+          state.last_action = 'executor_rejected_no_evidence';
+          state.last_updated = new Date().toISOString();
+          persistState(state);
+          printAgentPrompt('executor', task.id, { skill: task.skill, rejected: true });
+          return false;
+        }
+
+        console.log(`[EVIDENCE] Validated for ${task.id}: ${validation.total_changes} file(s) changed`);
+        logEvidence(state, task.id, 'evidence_validated', `changes=${validation.total_changes} files_changed=${validation.files_changed} files_created=${validation.files_created}`);
       }
 
       state.awaiting_agent = 'qa';
@@ -632,12 +954,19 @@ const orchestrate = async (system) => {
     if (state.awaiting_agent === 'qa') {
       if (hasToken(task.resultado, 'qa:fail')) {
         state.metrics.qa_fails++;
+
+        // Re-create pre-snapshot for executor retry
+        const projectDir = getProjectRoot(config);
+        if (projectDir) {
+          createPreSnapshot(task.id, projectDir, config);
+        }
+
         state.awaiting_agent = 'executor';
         state.last_agent = 'qa';
         state.last_action = 'qa_failed';
         state.last_updated = new Date().toISOString();
         persistState(state);
-        printAgentPrompt('executor', task.id);
+        printAgentPrompt('executor', task.id, { skill: task.skill });
         return false;
       }
 
@@ -661,12 +990,19 @@ const orchestrate = async (system) => {
     if (state.awaiting_agent === 'reviewer') {
       if (hasToken(task.resultado, 'review:fail')) {
         state.metrics.review_fails++;
+
+        // Re-create pre-snapshot for executor retry
+        const projectDir = getProjectRoot(config);
+        if (projectDir) {
+          createPreSnapshot(task.id, projectDir, config);
+        }
+
         state.awaiting_agent = 'executor';
         state.last_agent = 'reviewer';
         state.last_action = 'review_failed';
         state.last_updated = new Date().toISOString();
         persistState(state);
-        printAgentPrompt('executor', task.id);
+        printAgentPrompt('executor', task.id, { skill: task.skill });
         return false;
       }
 
@@ -712,6 +1048,7 @@ const orchestrate = async (system) => {
     console.log(`   Tasks done: ${state.metrics.tasks_done}`);
     console.log(`   Review passes: ${state.metrics.review_passes}`);
     console.log(`   QA passes: ${state.metrics.qa_passes}`);
+    console.log(`   Evidence rejections: ${state.metrics.evidence_rejections || 0}`);
     return false;
   }
 
@@ -733,6 +1070,8 @@ const printStatus = () => {
   const done = tasksParsed?.tasks?.filter((t) => t.estado === 'done').length || 0;
   const failed = tasksParsed?.tasks?.filter((t) => t.estado === 'failed').length || 0;
 
+  const projectDir = getProjectRoot(system.config);
+
   console.log('[STATUS] Current run state');
   console.log(`- run_id: ${state.run_id || '-'}`);
   console.log(`- phase: ${state.phase}`);
@@ -741,9 +1080,12 @@ const printStatus = () => {
   console.log(`- halted: ${state.halted} (${state.halt_reason || '-'})`);
   console.log(`- current_task_id: ${state.current_task_id || '-'}`);
   console.log(`- awaiting_agent: ${state.awaiting_agent || '-'}`);
+  console.log(`- evidence_required: ${state.evidence_required !== false}`);
+  console.log(`- project_root: ${projectDir || 'NOT SET (evidence disabled)'}`);
   console.log(`- tasks: total=${total}, pending=${pending}, running=${running}, done=${done}, failed=${failed}`);
   console.log(`- qa: pass=${state.metrics.qa_passes}, fail=${state.metrics.qa_fails}`);
   console.log(`- review: pass=${state.metrics.review_passes}, fail=${state.metrics.review_fails}`);
+  console.log(`- evidence_rejections: ${state.metrics.evidence_rejections || 0}`);
 };
 
 const runOneStep = async () => {
@@ -793,8 +1135,8 @@ const main = async () => {
   const command = (args[0] || '').toLowerCase();
   const knownCommands = new Set(['init', 'start', 'status', 'next']);
 
-  console.log('\n[RUNNER] Agent System Runner v1.1');
-  console.log('============================');
+  console.log('\n[RUNNER] Agent System Runner v2.0 (Evidence-Enforced)');
+  console.log('=====================================================');
 
   if (command === 'init') {
     const goal = args.slice(1).join(' ').trim() || 'Define project goal here';
@@ -803,6 +1145,12 @@ const main = async () => {
     resetRunArtifacts();
     const state = initializeState(goal, config);
     console.log(`[INIT] New run initialized: ${state.run_id}`);
+    const projectDir = getProjectRoot(config);
+    if (!projectDir) {
+      console.log('[WARN] No project_root configured. Set evidence.project_root in system/config.json');
+    } else {
+      console.log(`[INIT] Project root: ${projectDir}`);
+    }
     console.log('\n[END] Runner finished\n');
     return;
   }
@@ -814,6 +1162,12 @@ const main = async () => {
     resetRunArtifacts();
     const state = initializeState(goal, config);
     console.log(`[INIT] New run initialized: ${state.run_id}`);
+    const projectDir = getProjectRoot(config);
+    if (!projectDir) {
+      console.log('[WARN] No project_root configured. Set evidence.project_root in system/config.json');
+    } else {
+      console.log(`[INIT] Project root: ${projectDir}`);
+    }
     await runOneStep();
     return;
   }
@@ -841,9 +1195,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, loadSystem, orchestrate };
-
-
-
-
-
+module.exports = { main, loadSystem, orchestrate, scanProjectFiles, createPreSnapshot, createPostSnapshotAndDiff, validateExecutionEvidence };

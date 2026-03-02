@@ -209,6 +209,16 @@ Despues de cada iteracion, actualizar:
 5. **SIEMPRE** actualizar `last_updated` timestamp
 6. **LOGGEAR** todas las decisiones en [`system/memory.md`](system/memory.md)
 
+## REGLAS INQUEBRANTABLES (Evidence System v2.0)
+
+7. **NUNCA** aceptar `executor:done` sin verificar `system/evidence/{task_id}.json`
+8. **SIEMPRE** crear pre-snapshot antes de que el executor trabaje
+9. **SIEMPRE** comparar hashes post-ejecucion para validar cambios reales
+10. **Si evidence muestra 0 cambios** → RECHAZAR executor:done y re-prompting
+11. **QA DEBE verificar** evidence antes de dar qa:pass
+12. **Reviewer DEBE leer** skill file + evidence antes de dar review:pass
+13. **El file system es la fuente de verdad** — no el texto en tasks.md
+
 ## Prompt de Activacion
 
 ```

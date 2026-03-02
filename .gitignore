@@ -2,3 +2,5 @@
 .DS_Store
 Thumbs.db
 system/runs/
+system/evidence/*.json
+_smoke_test_project/
