@@ -12,7 +12,7 @@ const STATE_FILE = path.join(SYSTEM_DIR, 'state.json');
 const CONFIG_FILE = path.join(SYSTEM_DIR, 'config.json');
 
 const readJSON = (file) => {
-  const content = fs.readFileSync(file, 'utf-8');
+  const content = fs.readFileSync(file, 'utf-8').replace(/^\uFEFF/, '');
   return JSON.parse(content);
 };
 

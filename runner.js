@@ -11,7 +11,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const SYSTEM_DIR = './system';
+const ROOT_DIR = __dirname;
+const SYSTEM_DIR = path.join(ROOT_DIR, 'system');
 const GOAL_FILE = path.join(SYSTEM_DIR, 'goal.md');
 const PLAN_FILE = path.join(SYSTEM_DIR, 'plan.md');
 const TASKS_FILE = path.join(SYSTEM_DIR, 'tasks.md');

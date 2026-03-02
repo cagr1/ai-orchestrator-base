@@ -1,4 +1,4 @@
-﻿#  Sistema de Orquestacion de Agentes v1.0
+#  Sistema de Orquestacion de Agentes v1.0
 
 Sistema multi-agente donde agentes especializados interactuan entre si para desarrollar proyectos de software de forma automatizada.
 
@@ -112,6 +112,30 @@ Validaciones automaticas de `tasks.md`:
 ---
 
 ##  Como Usar
+
+### 0. Instalacion en cualquier proyecto (incluyendo ESM)
+
+Si copias esta carpeta como `.agents` dentro de un proyecto que usa `"type": "module"`, este sistema sigue funcionando porque incluye su propio `package.json` con `"type": "commonjs"`.
+
+Estructura recomendada:
+
+```text
+tu-proyecto/
+  .agents/
+    runner.js
+    package.json
+    scripts/
+    system/
+```
+
+Ejecuta siempre desde `.agents`:
+
+```bash
+cd .agents
+node scripts/init-project.js "Tu objetivo aqui"
+node runner.js status
+node runner.js next
+```
 
 ### 1. Iniciar Proyecto
 
