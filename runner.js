@@ -18,6 +18,7 @@ const TASKS_FILE = path.join(SYSTEM_DIR, 'tasks.md');
 const MEMORY_FILE = path.join(SYSTEM_DIR, 'memory.md');
 const STATE_FILE = path.join(SYSTEM_DIR, 'state.json');
 const CONFIG_FILE = path.join(SYSTEM_DIR, 'config.json');
+const RUNS_DIR = path.join(SYSTEM_DIR, 'runs');
 
 const readFile = (filepath) => {
   try {
@@ -33,11 +34,41 @@ const writeFile = (filepath, content) => {
 
 const readJSON = (filepath) => {
   const content = readFile(filepath);
-  return content ? JSON.parse(content) : null;
+  if (!content) return null;
+  const sanitized = content.replace(/^\uFEFF/, '');
+  return JSON.parse(sanitized);
 };
 
 const writeJSON = (filepath, data) => {
   writeFile(filepath, JSON.stringify(data, null, 2));
+};
+
+const ensureDir = (dirPath) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+};
+
+const snapshotRun = (state, event = 'state_update') => {
+  if (!state || !state.run_id) return;
+
+  ensureDir(RUNS_DIR);
+  const runDir = path.join(RUNS_DIR, state.run_id);
+  ensureDir(runDir);
+
+  writeFile(path.join(runDir, 'goal.md'), readFile(GOAL_FILE) || '');
+  writeFile(path.join(runDir, 'plan.md'), readFile(PLAN_FILE) || '');
+  writeFile(path.join(runDir, 'tasks.md'), readFile(TASKS_FILE) || '');
+  writeFile(path.join(runDir, 'memory.md'), readFile(MEMORY_FILE) || '');
+  writeFile(path.join(runDir, 'state.json'), `${JSON.stringify(state, null, 2)}\n`);
+
+  const eventLine = `${new Date().toISOString()} | ${event} | phase=${state.phase} | iteration=${state.iteration} | awaiting=${state.awaiting_agent || '-'} | status=${state.status}`;
+  fs.appendFileSync(path.join(runDir, 'events.log'), `${eventLine}\n`, 'utf-8');
+};
+
+const persistState = (state, event = 'state_update') => {
+  writeJSON(STATE_FILE, state);
+  snapshotRun(state, event);
 };
 
 const resetRunArtifacts = () => {
@@ -311,7 +342,7 @@ const initializeState = (goal, config) => {
     }
   };
 
-  writeJSON(STATE_FILE, state);
+  persistState(state);
   return state;
 };
 
@@ -402,7 +433,7 @@ const orchestrate = async (system) => {
     state.halt_reason = 'max_iterations_reached';
     state.status = 'halted';
     state.last_updated = new Date().toISOString();
-    writeJSON(STATE_FILE, state);
+    persistState(state);
     console.log('[HALT] HALT: max iterations reached');
     return false;
   }
@@ -414,7 +445,7 @@ const orchestrate = async (system) => {
     state.last_agent = 'runner';
     state.last_action = 'phase_planning';
     state.last_updated = new Date().toISOString();
-    writeJSON(STATE_FILE, state);
+    persistState(state);
     printAgentPrompt('planner');
     return false;
   }
@@ -431,7 +462,7 @@ const orchestrate = async (system) => {
       state.last_agent = 'runner';
       state.last_action = 'invalid_tasks_schema';
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       console.log('[HALT] HALT: invalid tasks schema detected.');
       tasksValidation.errors.forEach((e) => console.log(`   - ${e}`));
       return false;
@@ -442,7 +473,7 @@ const orchestrate = async (system) => {
       state.last_agent = 'runner';
       state.last_action = 'awaiting_planner_output';
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       printAgentPrompt('planner');
       return false;
     }
@@ -453,7 +484,7 @@ const orchestrate = async (system) => {
     state.last_action = 'plan_generated';
     state.metrics.tasks_total = tasksParsed.tasks.length;
     state.last_updated = new Date().toISOString();
-    writeJSON(STATE_FILE, state);
+    persistState(state);
     console.log(`[OK] Planner output detected. Tasks loaded: ${tasksParsed.tasks.length}`);
     return true;
   }
@@ -466,7 +497,7 @@ const orchestrate = async (system) => {
       state.last_agent = 'runner';
       state.last_action = 'invalid_tasks_schema';
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       console.log('[HALT] HALT: invalid tasks schema detected.');
       tasksValidation.errors.forEach((e) => console.log(`   - ${e}`));
       return false;
@@ -479,7 +510,7 @@ const orchestrate = async (system) => {
       state.last_agent = 'runner';
       state.last_action = 'halted_no_tasks';
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       console.log('[HALT] HALT: tasks.md is missing/invalid. Planner must generate a valid tasks table.');
       return false;
     }
@@ -495,7 +526,7 @@ const orchestrate = async (system) => {
       state.last_action = 'all_tasks_done';
       state.metrics.tasks_done = tasksParsed.tasks.length;
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       console.log('[OK] All tasks completed');
       return false;
     }
@@ -517,7 +548,7 @@ const orchestrate = async (system) => {
       state.last_agent = 'runner';
       state.last_action = 'task_selected';
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       printAgentPrompt('executor', nextTask.id);
       return false;
     }
@@ -529,7 +560,7 @@ const orchestrate = async (system) => {
       state.last_agent = 'runner';
       state.last_action = 'task_not_found_reset';
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       return true;
     }
 
@@ -537,7 +568,7 @@ const orchestrate = async (system) => {
       if (!hasToken(task.resultado, 'executor:done')) {
         state.awaiting_agent = 'executor';
         state.last_updated = new Date().toISOString();
-        writeJSON(STATE_FILE, state);
+        persistState(state);
         printAgentPrompt('executor', task.id);
         return false;
       }
@@ -546,7 +577,7 @@ const orchestrate = async (system) => {
       state.last_agent = 'executor';
       state.last_action = 'executor_done';
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       printAgentPrompt('qa', task.id);
       return false;
     }
@@ -558,14 +589,14 @@ const orchestrate = async (system) => {
         state.last_agent = 'qa';
         state.last_action = 'qa_failed';
         state.last_updated = new Date().toISOString();
-        writeJSON(STATE_FILE, state);
+        persistState(state);
         printAgentPrompt('executor', task.id);
         return false;
       }
 
       if (!hasToken(task.resultado, 'qa:pass')) {
         state.last_updated = new Date().toISOString();
-        writeJSON(STATE_FILE, state);
+        persistState(state);
         printAgentPrompt('qa', task.id);
         return false;
       }
@@ -575,7 +606,7 @@ const orchestrate = async (system) => {
       state.last_agent = 'qa';
       state.last_action = 'qa_passed';
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       printAgentPrompt('reviewer', task.id);
       return false;
     }
@@ -587,14 +618,14 @@ const orchestrate = async (system) => {
         state.last_agent = 'reviewer';
         state.last_action = 'review_failed';
         state.last_updated = new Date().toISOString();
-        writeJSON(STATE_FILE, state);
+        persistState(state);
         printAgentPrompt('executor', task.id);
         return false;
       }
 
       if (!hasToken(task.resultado, 'review:pass')) {
         state.last_updated = new Date().toISOString();
-        writeJSON(STATE_FILE, state);
+        persistState(state);
         printAgentPrompt('reviewer', task.id);
         return false;
       }
@@ -604,7 +635,7 @@ const orchestrate = async (system) => {
       state.last_agent = 'reviewer';
       state.last_action = 'review_passed';
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       printAgentPrompt('memory', task.id);
       return false;
     }
@@ -612,7 +643,7 @@ const orchestrate = async (system) => {
     if (state.awaiting_agent === 'memory') {
       if (!hasMemoryEntryForTask(system.memory || '', task.id)) {
         state.last_updated = new Date().toISOString();
-        writeJSON(STATE_FILE, state);
+        persistState(state);
         printAgentPrompt('memory', task.id);
         return false;
       }
@@ -620,7 +651,7 @@ const orchestrate = async (system) => {
       markTaskDone(state, tasksParsed, task.id);
       state.iteration++;
       state.last_updated = new Date().toISOString();
-      writeJSON(STATE_FILE, state);
+      persistState(state);
       console.log(`[OK] Task ${task.id} closed. Continuing with next pending task.`);
       return true;
     }
@@ -690,6 +721,7 @@ if (require.main === module) {
 }
 
 module.exports = { main, loadSystem, orchestrate };
+
 
 
 

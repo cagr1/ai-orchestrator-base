@@ -1,4 +1,3 @@
-﻿# Goal
+# Goal
 
 Define project goal here
-

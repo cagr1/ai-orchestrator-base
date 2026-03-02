@@ -133,6 +133,12 @@ Despues ejecuta:
 node runner.js
 ```
 
+### 1.2 Smoke tests del runner
+
+```bash
+node scripts/smoke-runner.js
+```
+
 **Ejemplos:**
 ```bash
 # Landing page
@@ -235,6 +241,10 @@ Actua como el Reviewer Agent. Evalua calidad despues de QA PASS:
 ---
 
 ##  Estados del Sistema
+
+Snapshots por run:
+- El runner guarda snapshots en `system/runs/<run_id>/`
+- Archivos: `goal.md`, `plan.md`, `tasks.md`, `memory.md`, `state.json`, `events.log`
 
 ### Fases
 
