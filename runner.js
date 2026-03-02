@@ -71,6 +71,47 @@ const persistState = (state, event = 'state_update') => {
   snapshotRun(state, event);
 };
 
+const writeRunSummary = (state, tasksParsed) => {
+  if (!state || !state.run_id) return;
+
+  ensureDir(RUNS_DIR);
+  const runDir = path.join(RUNS_DIR, state.run_id);
+  ensureDir(runDir);
+
+  const taskLines = tasksParsed && tasksParsed.tasks
+    ? tasksParsed.tasks.map((t) => `- ${t.id} | skill=${t.skill || '-'} | estado=${t.estado} | resultado=${t.resultado || '-'}`)
+    : [];
+
+  const content = [
+    '# Run Summary',
+    '',
+    `- run_id: ${state.run_id}`,
+    `- generated_at: ${new Date().toISOString()}`,
+    `- phase: ${state.phase}`,
+    `- status: ${state.status}`,
+    `- iteration: ${state.iteration}/${state.max_iterations}`,
+    '',
+    '## Metrics',
+    `- tasks_total: ${state.metrics.tasks_total}`,
+    `- tasks_done: ${state.metrics.tasks_done}`,
+    `- tasks_failed: ${state.metrics.tasks_failed}`,
+    `- qa_passes: ${state.metrics.qa_passes}`,
+    `- qa_fails: ${state.metrics.qa_fails}`,
+    `- review_passes: ${state.metrics.review_passes}`,
+    `- review_fails: ${state.metrics.review_fails}`,
+    '',
+    '## Task Results',
+    ...(taskLines.length ? taskLines : ['- no tasks found']),
+    '',
+    '## Task Lists',
+    `- completed_tasks: ${state.completed_tasks.join(', ') || '-'}`,
+    `- failed_tasks: ${state.failed_tasks.join(', ') || '-'}`,
+    `- skipped_tasks: ${state.skipped_tasks.join(', ') || '-'}`
+  ].join('\n');
+
+  writeFile(path.join(runDir, 'summary.md'), `${content}\n`);
+};
+
 const resetRunArtifacts = () => {
   writeFile(PLAN_FILE, '');
   writeFile(TASKS_FILE, '');
@@ -145,7 +186,7 @@ const parseTasks = (content) => {
   const table = parseMarkdownTable(content);
   if (!table) return null;
 
-  const requiredColumns = ['id', 'estado', 'resultado'];
+  const requiredColumns = ['id', 'skill', 'estado', 'resultado'];
   if (!requiredColumns.every((c) => table.headers.includes(c))) {
     return null;
   }
@@ -162,6 +203,7 @@ const parseTasks = (content) => {
     .filter((row) => taskIdPattern.test((row.id || '').trim()))
     .map((row) => ({
       id: (row.id || '').trim(),
+      skill: (row.skill || '').trim(),
       estado: (row.estado || '').trim().toLowerCase(),
       resultado: (row.resultado || '').trim().toLowerCase(),
       dependencies: [],
@@ -208,6 +250,9 @@ const validateTasks = (tasksParsed) => {
   tasksParsed.tasks.forEach((t) => {
     if (!ALLOWED_STATES.has(t.estado)) {
       errors.push(`invalid estado "${t.estado}" in task ${t.id}`);
+    }
+    if (!t.skill) {
+      errors.push(`missing skill in task ${t.id}`);
     }
   });
 
@@ -526,7 +571,8 @@ const orchestrate = async (system) => {
       state.last_action = 'all_tasks_done';
       state.metrics.tasks_done = tasksParsed.tasks.length;
       state.last_updated = new Date().toISOString();
-      persistState(state);
+      persistState(state, 'run_completed');
+      writeRunSummary(state, tasksParsed);
       console.log('[OK] All tasks completed');
       return false;
     }
@@ -658,6 +704,9 @@ const orchestrate = async (system) => {
   }
 
   if (state.phase === 'complete') {
+    if (tasksParsed && tasksParsed.tasks && tasksParsed.tasks.length > 0) {
+      writeRunSummary(state, tasksParsed);
+    }
     console.log('\n[OK] PROJECT COMPLETED SUCCESSFULLY');
     console.log(`   Tasks done: ${state.metrics.tasks_done}`);
     console.log(`   Review passes: ${state.metrics.review_passes}`);
@@ -668,12 +717,41 @@ const orchestrate = async (system) => {
   return false;
 };
 
-const main = async () => {
-  const goalFromArgs = process.argv.slice(2).join(' ');
+const printStatus = () => {
+  const system = loadSystem();
+  const state = system.state;
+  if (!state) {
+    console.log('[ERROR] Missing system/state.json');
+    return;
+  }
 
-  console.log('\n[RUNNER] Agent System Runner v1.1');
-  console.log('============================');
+  const tasksParsed = parseTasks(system.tasks || '');
+  const total = tasksParsed?.tasks?.length || 0;
+  const pending = tasksParsed?.tasks?.filter((t) => t.estado === 'pending').length || 0;
+  const running = tasksParsed?.tasks?.filter((t) => t.estado === 'running').length || 0;
+  const done = tasksParsed?.tasks?.filter((t) => t.estado === 'done').length || 0;
+  const failed = tasksParsed?.tasks?.filter((t) => t.estado === 'failed').length || 0;
 
+  console.log('[STATUS] Current run state');
+  console.log(`- run_id: ${state.run_id || '-'}`);
+  console.log(`- phase: ${state.phase}`);
+  console.log(`- iteration: ${state.iteration}/${state.max_iterations}`);
+  console.log(`- status: ${state.status}`);
+  console.log(`- halted: ${state.halted} (${state.halt_reason || '-'})`);
+  console.log(`- current_task_id: ${state.current_task_id || '-'}`);
+  console.log(`- awaiting_agent: ${state.awaiting_agent || '-'}`);
+  console.log(`- tasks: total=${total}, pending=${pending}, running=${running}, done=${done}, failed=${failed}`);
+  console.log(`- qa: pass=${state.metrics.qa_passes}, fail=${state.metrics.qa_fails}`);
+  console.log(`- review: pass=${state.metrics.review_passes}, fail=${state.metrics.review_fails}`);
+};
+
+const runOneStep = async () => {
+  const system = loadSystem();
+  await orchestrate(system);
+  console.log('\n[END] Runner next-step finished\n');
+};
+
+const runLoop = async (goalFromArgs) => {
   let goal = readFile(GOAL_FILE);
   const config = readJSON(CONFIG_FILE);
   let state = readJSON(STATE_FILE);
@@ -698,10 +776,8 @@ const main = async () => {
     console.log('\n[INIT] Initializing new run...');
     state = initializeState(goal, config);
     startedNewRun = true;
-  } else {
-    if (!startedNewRun) {
-      console.log(`\n[STATE] Resuming run: ${state.run_id || '(missing run id)'}`);
-    }
+  } else if (!startedNewRun) {
+    console.log(`\n[STATE] Resuming run: ${state.run_id || '(missing run id)'}`);
   }
 
   let shouldContinue = true;
@@ -709,7 +785,40 @@ const main = async () => {
     const system = loadSystem();
     shouldContinue = await orchestrate(system);
   }
+};
 
+const main = async () => {
+  const args = process.argv.slice(2);
+  const command = (args[0] || '').toLowerCase();
+  const knownCommands = new Set(['init', 'status', 'next']);
+
+  console.log('\n[RUNNER] Agent System Runner v1.1');
+  console.log('============================');
+
+  if (command === 'init') {
+    const goal = args.slice(1).join(' ').trim() || 'Define project goal here';
+    const config = readJSON(CONFIG_FILE);
+    writeFile(GOAL_FILE, `# Goal\n\n${goal}\n`);
+    resetRunArtifacts();
+    const state = initializeState(goal, config);
+    console.log(`[INIT] New run initialized: ${state.run_id}`);
+    console.log('\n[END] Runner finished\n');
+    return;
+  }
+
+  if (command === 'status') {
+    printStatus();
+    console.log('\n[END] Runner finished\n');
+    return;
+  }
+
+  if (command === 'next') {
+    await runOneStep();
+    return;
+  }
+
+  const goalFromArgs = knownCommands.has(command) ? '' : args.join(' ');
+  await runLoop(goalFromArgs);
   console.log('\n[END] Runner finished\n');
 };
 

@@ -14,7 +14,7 @@
   "halt_reason": null,
   "last_agent": "runner",
   "last_action": "awaiting_planner_output",
-  "last_updated": "2026-03-02T17:57:31.425Z",
+  "last_updated": null,
   "metrics": {
     "tasks_total": 0,
     "tasks_done": 0,

@@ -103,7 +103,7 @@ En `system/tasks.md` (columna `resultado`) cada agente debe agregar tokens para 
 - Memory: al registrar la tarea en `system/memory.md`, el runner la marca `done`
 
 Validaciones automaticas de `tasks.md`:
-- Columnas minimas: `id`, `estado`, `resultado`
+- Columnas minimas: `id`, `skill`, `estado`, `resultado`
 - `id` valido: `T001`, `T002`, etc.
 - `estado` valido: `pending`, `running`, `done`, `failed`, `skipped`
 - Sin `id` duplicados
@@ -118,6 +118,14 @@ Validaciones automaticas de `tasks.md`:
 ```bash
 # Desde el directorio .ai
 node runner.js "Tu objetivo aqui"
+```
+
+Comandos CLI:
+
+```bash
+node runner.js init "Tu objetivo aqui"   # Inicializa run limpio
+node runner.js status                     # Muestra estado actual
+node runner.js next                       # Ejecuta una sola iteracion
 ```
 
 ### 1.1 Inicializar proyecto limpio (recomendado)
@@ -244,7 +252,7 @@ Actua como el Reviewer Agent. Evalua calidad despues de QA PASS:
 
 Snapshots por run:
 - El runner guarda snapshots en `system/runs/<run_id>/`
-- Archivos: `goal.md`, `plan.md`, `tasks.md`, `memory.md`, `state.json`, `events.log`
+- Archivos: `goal.md`, `plan.md`, `tasks.md`, `memory.md`, `state.json`, `events.log`, `summary.md`
 
 ### Fases
 

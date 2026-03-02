@@ -37,10 +37,10 @@ const testInvalidTasksHalt = () => {
   write(TASKS, [
     '# Tasks',
     '',
-    '| id | estado | resultado | dependencias |',
-    '| --- | --- | --- | --- |',
-    '| T001 | pending | - | T001 |',
-    '| T001 | pending | - | - |'
+    '| id | skill | estado | resultado | dependencias |',
+    '| --- | --- | --- | --- | --- |',
+    '| T001 | frontend-react-hooks | pending | - | T001 |',
+    '| T001 | frontend-react-hooks | pending | - | - |'
   ].join('\n'));
 
   run('node runner.js');
@@ -55,10 +55,10 @@ const testDependenciesSelection = () => {
   write(TASKS, [
     '# Tasks',
     '',
-    '| id | estado | resultado | dependencias |',
-    '| --- | --- | --- | --- |',
-    '| T001 | pending | - | - |',
-    '| T002 | pending | - | T001 |'
+    '| id | skill | estado | resultado | dependencias |',
+    '| --- | --- | --- | --- | --- |',
+    '| T001 | frontend-react-hooks | pending | - | - |',
+    '| T002 | frontend-react-hooks | pending | - | T001 |'
   ].join('\n'));
 
   const output = run('node runner.js');
@@ -75,12 +75,42 @@ const testRunSnapshots = () => {
   assert(fs.existsSync(path.join(runDir, 'events.log')), 'snapshots: events log must exist');
 };
 
+const testRunSummaryOnComplete = () => {
+  run('node scripts/init-project.js "Smoke summary"');
+  write(PLAN, '# Plan\n\nDemo\n');
+  write(TASKS, [
+    '# Tasks',
+    '',
+    '| id | skill | estado | resultado |',
+    '| --- | --- | --- | --- |',
+    '| T001 | frontend-react-hooks | done | executor:done; qa:pass; review:pass(score=8); memory:written |'
+  ].join('\n'));
+  run('node runner.js');
+
+  const state = readState();
+  const runDir = path.join(SYSTEM, 'runs', state.run_id);
+  assert(fs.existsSync(path.join(runDir, 'summary.md')), 'summary: summary.md must exist when run completes');
+};
+
+const testCliCommands = () => {
+  const initOut = run('node runner.js init "Smoke cli init"');
+  assert(initOut.includes('New run initialized'), 'cli init: expected initialized message');
+
+  const statusOut = run('node runner.js status');
+  assert(statusOut.includes('[STATUS] Current run state'), 'cli status: expected status output');
+
+  const nextOut = run('node runner.js next');
+  assert(nextOut.includes('next-step finished'), 'cli next: expected next-step finished message');
+};
+
 const main = () => {
   console.log('[SMOKE] Running runner smoke tests...');
   testInit();
   testInvalidTasksHalt();
   testDependenciesSelection();
   testRunSnapshots();
+  testRunSummaryOnComplete();
+  testCliCommands();
   console.log('[SMOKE] All tests passed.');
 };
 
