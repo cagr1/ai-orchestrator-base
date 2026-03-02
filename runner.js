@@ -46,6 +46,8 @@ const resetRunArtifacts = () => {
 };
 
 const taskIdPattern = /^T\d+$/i;
+const ALLOWED_STATES = new Set(['pending', 'running', 'done', 'failed', 'skipped']);
+const DEPENDENCY_COLUMNS = ['dependencias', 'dependencies', 'depends_on', 'deps'];
 
 const parseMarkdownTable = (content) => {
   const lines = content.split(/\r?\n/);
@@ -117,16 +119,113 @@ const parseTasks = (content) => {
     return null;
   }
 
+  const invalidIdRows = table.rows
+    .map((row, idx) => ({ row, idx }))
+    .filter(({ row }) => {
+      const id = (row.id || '').trim();
+      return id.length > 0 && !taskIdPattern.test(id);
+    })
+    .map(({ row, idx }) => ({ rowNumber: idx + 1, id: (row.id || '').trim() }));
+
   const tasks = table.rows
     .filter((row) => taskIdPattern.test((row.id || '').trim()))
     .map((row) => ({
       id: (row.id || '').trim(),
       estado: (row.estado || '').trim().toLowerCase(),
       resultado: (row.resultado || '').trim().toLowerCase(),
+      dependencies: [],
       raw: row
     }));
 
-  return { table, tasks };
+  return { table, tasks, invalidIdRows };
+};
+
+const parseDependencies = (value) => {
+  if (!value) return [];
+  const raw = value.trim().toLowerCase();
+  if (!raw || raw === '-' || raw === 'none' || raw === 'n/a') return [];
+  const ids = raw.match(/t\d+/gi) || [];
+  return Array.from(new Set(ids.map((id) => id.toUpperCase())));
+};
+
+const findDependencyColumn = (headers) => headers.find((h) => DEPENDENCY_COLUMNS.includes(h));
+
+const validateTasks = (tasksParsed) => {
+  const errors = [];
+  if (!tasksParsed || !tasksParsed.tasks || tasksParsed.tasks.length === 0) {
+    errors.push('tasks table has no valid task rows');
+    return { valid: false, errors };
+  }
+
+  if (tasksParsed.invalidIdRows && tasksParsed.invalidIdRows.length > 0) {
+    tasksParsed.invalidIdRows.forEach((r) => {
+      errors.push(`invalid task id "${r.id}" at table row ${r.rowNumber}`);
+    });
+  }
+
+  const ids = tasksParsed.tasks.map((t) => t.id.toUpperCase());
+  const seen = new Set();
+  const duplicates = new Set();
+  ids.forEach((id) => {
+    if (seen.has(id)) duplicates.add(id);
+    seen.add(id);
+  });
+  if (duplicates.size > 0) {
+    errors.push(`duplicate task ids: ${Array.from(duplicates).join(', ')}`);
+  }
+
+  tasksParsed.tasks.forEach((t) => {
+    if (!ALLOWED_STATES.has(t.estado)) {
+      errors.push(`invalid estado "${t.estado}" in task ${t.id}`);
+    }
+  });
+
+  const dependencyColumn = findDependencyColumn(tasksParsed.table.headers);
+  if (dependencyColumn) {
+    tasksParsed.tasks.forEach((t) => {
+      t.dependencies = parseDependencies(t.raw[dependencyColumn] || '');
+    });
+
+    const idSet = new Set(ids);
+    tasksParsed.tasks.forEach((t) => {
+      t.dependencies.forEach((depId) => {
+        if (!idSet.has(depId)) {
+          errors.push(`task ${t.id} references unknown dependency ${depId}`);
+        }
+        if (depId === t.id.toUpperCase()) {
+          errors.push(`task ${t.id} cannot depend on itself`);
+        }
+      });
+    });
+
+    if (errors.length === 0) {
+      const graph = new Map(tasksParsed.tasks.map((t) => [t.id.toUpperCase(), t.dependencies]));
+      const color = new Map(); // 0 unvisited, 1 visiting, 2 visited
+      let hasCycle = false;
+
+      const visit = (node) => {
+        if (hasCycle) return;
+        const c = color.get(node) || 0;
+        if (c === 1) {
+          hasCycle = true;
+          return;
+        }
+        if (c === 2) return;
+        color.set(node, 1);
+        (graph.get(node) || []).forEach((next) => visit(next));
+        color.set(node, 2);
+      };
+
+      graph.forEach((_v, node) => visit(node));
+      if (hasCycle) errors.push('dependency cycle detected in tasks table');
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    dependencyColumn: dependencyColumn || null
+  };
 };
 
 const saveTasks = (table, tasksById) => {
@@ -167,7 +266,14 @@ const hasMemoryEntryForTask = (memoryContent, taskId) => {
   return new RegExp(`\\b${taskId}\\b`, 'i').test(memoryContent);
 };
 
-const chooseNextPendingTask = (tasks) => tasks.find((t) => t.estado === 'pending');
+const chooseNextPendingTask = (tasks) => {
+  const byId = new Map(tasks.map((t) => [t.id.toUpperCase(), t]));
+  return tasks.find((t) => {
+    if (t.estado !== 'pending') return false;
+    const deps = t.dependencies || [];
+    return deps.every((depId) => byId.get(depId)?.estado === 'done');
+  });
+};
 
 const generateRunId = (goal) => {
   const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -315,8 +421,22 @@ const orchestrate = async (system) => {
 
   const tasksParsed = parseTasks(system.tasks || '');
   const planReady = Boolean(system.plan && system.plan.trim());
+  const tasksValidation = tasksParsed ? validateTasks(tasksParsed) : null;
 
   if (state.phase === 'planning') {
+    if (tasksParsed && tasksValidation && !tasksValidation.valid) {
+      state.halted = true;
+      state.halt_reason = 'invalid_tasks_schema';
+      state.status = 'halted';
+      state.last_agent = 'runner';
+      state.last_action = 'invalid_tasks_schema';
+      state.last_updated = new Date().toISOString();
+      writeJSON(STATE_FILE, state);
+      console.log('[HALT] HALT: invalid tasks schema detected.');
+      tasksValidation.errors.forEach((e) => console.log(`   - ${e}`));
+      return false;
+    }
+
     if (!planReady || !tasksParsed || tasksParsed.tasks.length === 0) {
       state.awaiting_agent = 'planner';
       state.last_agent = 'runner';
@@ -339,6 +459,19 @@ const orchestrate = async (system) => {
   }
 
   if (state.phase === 'execution') {
+    if (tasksParsed && tasksValidation && !tasksValidation.valid) {
+      state.halted = true;
+      state.halt_reason = 'invalid_tasks_schema';
+      state.status = 'halted';
+      state.last_agent = 'runner';
+      state.last_action = 'invalid_tasks_schema';
+      state.last_updated = new Date().toISOString();
+      writeJSON(STATE_FILE, state);
+      console.log('[HALT] HALT: invalid tasks schema detected.');
+      tasksValidation.errors.forEach((e) => console.log(`   - ${e}`));
+      return false;
+    }
+
     if (!tasksParsed || tasksParsed.tasks.length === 0) {
       state.halted = true;
       state.halt_reason = 'invalid_or_empty_tasks';
@@ -370,7 +503,12 @@ const orchestrate = async (system) => {
     if (!state.current_task_id) {
       const nextTask = chooseNextPendingTask(tasksParsed.tasks);
       if (!nextTask) {
-        console.log('[INFO] No pending tasks available. Check task statuses/dependencies.');
+        const hasPending = tasksParsed.tasks.some((t) => t.estado === 'pending');
+        if (hasPending) {
+          console.log('[INFO] Pending tasks are blocked by dependencies. Complete prerequisite tasks first.');
+        } else {
+          console.log('[INFO] No pending tasks available. Check task statuses/dependencies.');
+        }
         return false;
       }
 

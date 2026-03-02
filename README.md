@@ -102,6 +102,13 @@ En `system/tasks.md` (columna `resultado`) cada agente debe agregar tokens para 
 - Reviewer: `review:pass(score=X)` o `review:fail(score=X)`
 - Memory: al registrar la tarea en `system/memory.md`, el runner la marca `done`
 
+Validaciones automaticas de `tasks.md`:
+- Columnas minimas: `id`, `estado`, `resultado`
+- `id` valido: `T001`, `T002`, etc.
+- `estado` valido: `pending`, `running`, `done`, `failed`, `skipped`
+- Sin `id` duplicados
+- Dependencias validas (si usas `dependencias`/`dependencies`/`depends_on`/`deps`): sin referencias inexistentes, sin autoreferencia y sin ciclos
+
 ---
 
 ##  Como Usar
@@ -111,6 +118,19 @@ En `system/tasks.md` (columna `resultado`) cada agente debe agregar tokens para 
 ```bash
 # Desde el directorio .ai
 node runner.js "Tu objetivo aqui"
+```
+
+### 1.1 Inicializar proyecto limpio (recomendado)
+
+```bash
+# Resetea goal/plan/tasks/state para un nuevo proyecto
+node scripts/init-project.js "Tu objetivo aqui"
+```
+
+Despues ejecuta:
+
+```bash
+node runner.js
 ```
 
 **Ejemplos:**
