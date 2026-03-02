@@ -1,0 +1,183 @@
+{
+  "version": "1.0",
+  "project_type": "webapp",
+  "max_iterations": 20,
+  "halt_on_failure": false,
+  "allowed_stacks": ["dotnet", "node", "react", "vue", "sqlserver", "postgres", "laravel"],
+  
+  "skills_enabled": {
+    "basic": [
+      "frontend-react-hooks",
+      "frontend-vue-composition",
+      "frontend-animations",
+      "backend-dotnet-data-sqlserver",
+      "backend-laravel-api",
+      "backend-node-api",
+      "database-postgres-schema",
+      "database-migrations-dotnet-prisma",
+      "database-prisma-queries",
+      "devops-docker",
+      "devops-ci-cd",
+      "devops-deployment",
+      "testing-backend-test",
+      "security-api-security",
+      "ux"
+    ],
+    "professional": [
+      "frontend-react-hooks",
+      "frontend-vue-composition",
+      "frontend-animations",
+      "frontend-ux-accessibility",
+      "backend-dotnet-data-sqlserver",
+      "backend-laravel-api",
+      "backend-node-api",
+      "database-postgres-schema",
+      "database-migrations-dotnet-prisma",
+      "database-prisma-queries",
+      "devops-docker",
+      "devops-ci-cd",
+      "devops-deployment",
+      "testing-backend-test",
+      "security-api-security",
+      "architecture-global-architect",
+      "ux"
+    ],
+    "premium": [
+      "frontend-react-hooks",
+      "frontend-vue-composition",
+      "frontend-design-taste",
+      "frontend-design-awwwards",
+      "frontend-animations-expert",
+      "frontend-performance-expert",
+      "frontend-ux-accessibility",
+      "backend-dotnet-data-sqlserver",
+      "backend-laravel-api",
+      "backend-node-api",
+      "database-postgres-schema",
+      "database-migrations-dotnet-prisma",
+      "database-prisma-queries",
+      "database-postgresql-expert",
+      "database-sqlserver-expert",
+      "devops-docker",
+      "devops-ci-cd",
+      "devops-deployment",
+      "testing-backend-test",
+      "security-api-security",
+      "architecture-global-architect",
+      "ux"
+    ]
+  },
+  
+  "project_tiers": {
+    "basic": {
+      "description": "MVP, landing simple, prototipo rápido, sitios informativos",
+      "default_skills": "basic",
+      "max_complexity": 2
+    },
+    "professional": {
+      "description": "Sitio corporativo, e-commerce estándar, SaaS, apps con usuarios",
+      "default_skills": "professional",
+      "max_complexity": 3
+    },
+    "premium": {
+      "description": "Awwwards-level, enterprise, high-traffic, diseño único, animaciones complejas",
+      "default_skills": "premium",
+      "max_complexity": 4
+    }
+  },
+  
+  "skill_triggers": {
+    "auto_upgrade_to_premium": [
+      "awwwards",
+      "premium",
+      "high-end",
+      "luxury",
+      "enterprise",
+      "award-winning",
+      "portfolio creative",
+      "agency",
+      "showcase"
+    ],
+    "auto_upgrade_to_professional": [
+      "accessible",
+      "a11y",
+      "wcag",
+      "production",
+      "scalable",
+      "corporate",
+      "business"
+    ],
+    "expert_animations": [
+      "animations",
+      "motion",
+      "transitions",
+      "gsap",
+      "framer",
+      "parallax",
+      "scroll-trigger"
+    ],
+    "expert_performance": [
+      "performance",
+      "optimization",
+      "fast",
+      "lighthouse",
+      "core web vitals",
+      "lazy loading",
+      "100 score"
+    ],
+    "expert_database": [
+      "optimization",
+      "advanced queries",
+      "partitioning",
+      "sharding",
+      "high traffic",
+      "millions of records"
+    ]
+  },
+  
+  "skill_selector": {
+    "landing": {
+      "basic": ["frontend-react-hooks", "frontend-vue-composition", "frontend-animations", "ux"],
+      "professional": ["frontend-react-hooks", "frontend-vue-composition", "frontend-animations", "frontend-ux-accessibility", "ux"],
+      "premium": ["frontend-design-taste", "frontend-design-awwwards", "frontend-animations-expert", "frontend-performance-expert", "ux"]
+    },
+    "api": {
+      "basic": ["backend-node-api", "backend-laravel-api"],
+      "professional": ["backend-node-api", "backend-laravel-api", "backend-dotnet-data-sqlserver", "security-api-security"],
+      "premium": ["backend-node-api", "backend-laravel-api", "backend-dotnet-data-sqlserver", "database-postgresql-expert", "security-api-security"]
+    },
+    "database": {
+      "basic": ["database-postgres-schema", "database-prisma-queries"],
+      "professional": ["database-postgres-schema", "database-migrations-dotnet-prisma", "database-prisma-queries"],
+      "premium": ["database-postgres-schema", "database-migrations-dotnet-prisma", "database-postgresql-expert", "database-sqlserver-expert"]
+    },
+    "fullstack": {
+      "basic": ["frontend-react-hooks", "backend-node-api", "database-postgres-schema"],
+      "professional": ["frontend-react-hooks", "frontend-ux-accessibility", "backend-node-api", "database-postgres-schema", "security-api-security"],
+      "premium": ["frontend-design-taste", "frontend-animations-expert", "backend-node-api", "database-postgresql-expert", "security-api-security"]
+    },
+    "testing": {
+      "all": ["testing-backend-test"]
+    },
+    "devops": {
+      "all": ["devops-docker", "devops-ci-cd", "devops-deployment"]
+    },
+    "security": {
+      "all": ["security-api-security"]
+    }
+  },
+  
+  "review_criteria": {
+    "min_pass_score": 7,
+    "require_tests": true,
+    "require_types": true,
+    "require_error_handling": true
+  },
+  
+  "complexity_levels": {
+    "1": "Basic - Componentes simples, CRUD estándar, layouts básicos",
+    "2": "Standard - Interacciones medianas, integraciones API, diseño responsive",
+    "3": "Advanced - Animaciones complejas, estados globales, optimización de queries",
+    "4": "Expert - Arquitectura escalable, micro-interacciones premium, high-performance"
+  }
+}

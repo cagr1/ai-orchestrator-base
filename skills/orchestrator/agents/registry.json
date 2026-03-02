@@ -1,0 +1,151 @@
+{
+  "version": "1.0.0",
+  "agents": {
+    "decision-classifier": {
+      "name": "Decision Classifier",
+      "path": "classifier/decision-classifier.md",
+      "role": "Clasifica el tipo de decisión y determina qué agentes deben ejecutarse",
+      "domains": ["architecture", "backend", "database", "frontend", "security", "devops", "testing"],
+      "project_types": ["ERP", "MVP", "Landing", "SaaS"],
+      "always_active": true,
+      "description": "El agente que decide qué otros agentes usar"
+    },
+    "global-architect": {
+      "name": "Global Architect",
+      "path": "architecture/global-architect.md",
+      "role": "Arquitecto de decisiones críticas - evita over-engineering",
+      "trigger_conditions": ["high_risk", "architecture_domain", "complex_refactor"],
+      "criterios": ["¿Te acerca al launch?", "¿Es simple?"],
+      "red_flags": ["microservicios en MVP", "DDD completo innecesario", "GraphQL por moda"]
+    },
+    "citasbot-stack": {
+      "name": "CitasBot Stack",
+      "path": "stacks/citasbot.-stack.md",
+      "role": "Stack específico para CitasBot SaaS",
+      "projects": ["citasbot"],
+      "stack": ["Next.js 16", "React 19", "Prisma", "PostgreSQL", "Paddle", "Twilio"]
+    },
+    "cisepro-stack": {
+      "name": "Cisepro Stack",
+      "path": "stacks/cisepro-stack.md",
+      "role": "Stack específico para ERP Cisepro",
+      "projects": ["cisepro"],
+      "stack": ["Vue 3", ".NET 8", "EF Core", "SQL Server"]
+    },
+    "landing-stack": {
+      "name": "Landing Stack",
+      "path": "stacks/landing-stack.md",
+      "role": "Stack para landing pages Awwwards level",
+      "projects": ["landing-*"],
+      "stack": ["Vue 3", "React", "GSAP", "Three.js", "Vercel"],
+      "checklist": ["Performance 95+ mobile", "Animaciones 60fps", "Lazy load", "SEO básico"]
+    },
+    "backend-node": {
+      "name": "Node.js Backend",
+      "path": "backend/node-api.md",
+      "role": "API Node.js + Express + Prisma + Supabase",
+      "stack": ["Node.js", "Express", "Prisma", "Supabase"],
+      "patterns": ["Routes → Controllers → Services", "Zod validation", "authMiddleware"],
+      "red_flags": ["callbacks", "try-catch por request", "queries en routes"]
+    },
+    "backend-laravel": {
+      "name": "Laravel API",
+      "path": "backend/laravel-api.md",
+      "role": "API REST Laravel",
+      "stack": ["Laravel", "MySQL", "Redis"]
+    },
+    "backend-dotnet": {
+      "name": ".NET Backend",
+      "path": "backend/dotnet-data-sqlserver.md",
+      "role": "API .NET 8 + EF Core + SQL Server",
+      "stack": [".NET 8", "EF Core", "SQL Server"],
+      "patterns": ["Repository Pattern", "Unit of Work"]
+    },
+    "frontend-react": {
+      "name": "React Frontend",
+      "path": "frontend/react-hooks.md",
+      "role": "React con hooks personalizados",
+      "stack": ["React", "Next.js", "TailwindCSS", "Radix UI"]
+    },
+    "frontend-vue": {
+      "name": "Vue Frontend",
+      "path": "frontend/vue-composition.md",
+      "role": "Vue 3 + Composition API",
+      "stack": ["Vue 3", "Vite", "TailwindCSS", "Pinia"]
+    },
+    "frontend-animations": {
+      "name": "Animations",
+      "path": "frontend/animations.md",
+      "role": "GSAP + Three.js para animaciones",
+      "stack": ["GSAP 3", "ScrollTrigger", "Three.js", "Lenis"],
+      "checklist": ["60fps", "Lazy load", "Performance mobile"]
+    },
+    "database-prisma": {
+      "name": "Prisma Database",
+      "path": "database/prisma-queries.md",
+      "role": "Schema y queries Prisma",
+      "patterns": ["N+1 prevention", "Transactions", "Migrations"]
+    },
+    "database-postgres": {
+      "name": "PostgreSQL",
+      "path": "database/postgres-schema.md",
+      "role": "Schema y optimización PostgreSQL",
+      "stack": ["PostgreSQL", "Supabase"]
+    },
+    "database-migrations": {
+      "name": "Database Migrations",
+      "path": "database/migrations-dotnet-prisma.md",
+      "role": "Estrategias de migración",
+      "patterns": ["Zero-downtime", "Rollback", "Seed data"]
+    },
+    "devops-ci": {
+      "name": "CI/CD Pipeline",
+      "path": "devops/ci-cd.md",
+      "role": "GitHub Actions pipelines",
+      "stack": ["GitHub Actions", "Azure DevOps"],
+      "restricciones": ["NO deploy sin tests", "NO secrets hardcoded", "NO builds >10min"]
+    },
+    "devops-docker": {
+      "name": "Docker",
+      "path": "devops/docker.md",
+      "role": "Contenedores Docker",
+      "patterns": ["Multi-stage builds", "Alpine images", "Health checks"]
+    },
+    "devops-deploy": {
+      "name": "Deployment",
+      "path": "devops/deployment.md",
+      "role": "Deploy platforms",
+      "platforms": {
+        "mvp": ["Vercel", "Railway", "Render"],
+        "enterprise": ["AWS", "Azure", "GCP"],
+        "landing": ["Vercel", "Netlify"]
+      }
+    },
+    "security-api": {
+      "name": "API Security",
+      "path": "security/api-security.md",
+      "role": "Seguridad API",
+      "practices": ["Rate limiting", "CORS", "Input validation", "Auth tokens"]
+    },
+    "testing-backend": {
+      "name": "Backend Tests",
+      "path": "testing/backend-test.md",
+      "role": "Tests para backend",
+      "stack": ["Jest", "Vitest", "xUnit", "NUnit"],
+      "coverage_target": ">80% critical paths"
+    },
+    "winforms-migration": {
+      "name": "WinForms Migration",
+      "path": "winforms-migration.md",
+      "role": "Extraer lógica de WinForms a .NET Core",
+      "strategy": ["Extraer validaciones", "Convertir SP a Services", "Map DataTables a Entities"],
+      "red_flags": ["Lógica en eventos UI", "SQL concatenado", "State global"]
+    },
+    "product-showcase": {
+      "name": "Product Showcase",
+      "path": "PRODUCT_SHOWCASE.md",
+      "role": "Pensar el MVP como vitrina técnica para LinkedIn",
+      "restricciones": ["No features irrelevantes", "No complejidad artificial", "No tutorial vibes"]
+    }
+  }
+}

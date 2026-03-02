@@ -1,0 +1,134 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-02-26T14:58:21.886Z",
+  "last_active": "citasbot",
+  "projects": [
+    {
+      "id": "citasbot",
+      "name": "CitasBot SaaS",
+      "description": "SaaS de gestión de citas con WhatsApp bot y pagos",
+      "url": "https://github.com/cagr1/citasbot-whatsapp",
+      "stack": [
+        "Next.js 16",
+        "React 19",
+        "Prisma",
+        "PostgreSQL",
+        "Paddle",
+        "Twilio"
+      ],
+      "phase": "build",
+      "health": "active",
+      "priority": 1,
+      "type": "SaaS",
+      "folder": "citasbot"
+    },
+    {
+      "id": "cisepro",
+      "name": "Cisepro ERP",
+      "description": "ERP web para empresa de seguridad",
+      "url": "https://github.com/cagr1/Cisepro-ERP-Web",
+      "stack": [
+        "Vue 3",
+        ".NET 8",
+        "EF Core",
+        "SQL Server"
+      ],
+      "phase": "build",
+      "health": "active",
+      "priority": 2,
+      "type": "ERP",
+      "folder": "cisepro"
+    },
+    {
+      "id": "aicore-multimodel",
+      "name": "AI Core Multi-Model",
+      "description": "MCP para múltiples modelos de AI",
+      "url": "https://github.com/cagr1/aicore-multimodel",
+      "stack": [
+        "Node.js",
+        "MCP SDK"
+      ],
+      "phase": "build",
+      "health": "active",
+      "priority": 3,
+      "type": "MCP",
+      "folder": "aicore-multimodel"
+    },
+    {
+      "id": "landing-premom",
+      "name": "Premom Landing",
+      "description": "Landing page para premom",
+      "url": "https://premom-beta.vercel.app/",
+      "stack": [
+        "Vue 3",
+        "GSAP"
+      ],
+      "phase": "ship",
+      "health": "completed",
+      "priority": 4,
+      "type": "Landing",
+      "folder": "landing-premom"
+    },
+    {
+      "id": "landing-arquitect",
+      "name": "Arquitect Nine",
+      "description": "Landing page para arquitectos",
+      "url": "https://arquitect-nine.vercel.app/",
+      "stack": [
+        "Vue 3",
+        "GSAP",
+        "Three.js"
+      ],
+      "phase": "ship",
+      "health": "completed",
+      "priority": 5,
+      "type": "Landing",
+      "folder": "landing-arquitect"
+    },
+    {
+      "id": "landing-ehdumusic",
+      "name": "EHDU Music",
+      "description": "Portfolio musical",
+      "url": "https://ehdumusic.vercel.app/",
+      "stack": [
+        "Vue 3",
+        "GSAP"
+      ],
+      "phase": "ship",
+      "health": "completed",
+      "priority": 6,
+      "type": "Landing",
+      "folder": "landing-ehdumusic"
+    },
+    {
+      "id": "landing-jenco",
+      "name": "Jen & Co",
+      "description": "Landing page boutique",
+      "url": "https://jen-co.vercel.app/",
+      "stack": [
+        "Vue 3",
+        "GSAP"
+      ],
+      "phase": "ship",
+      "health": "completed",
+      "priority": 7,
+      "type": "Landing",
+      "folder": "landing-jenco"
+    },
+    {
+      "id": "portfolio",
+      "name": "Portfolio Carlos",
+      "description": "Portfolio personal",
+      "url": "https://www.carlosgallardo.dev/",
+      "stack": [
+        "Next.js",
+        "TailwindCSS"
+      ],
+      "phase": "ship",
+      "health": "completed",
+      "priority": 8,
+      "type": "Portfolio",
+      "folder": "portfolio"
+    }
+  ]
+}

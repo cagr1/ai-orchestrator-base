@@ -1,0 +1,18 @@
+{
+  "lessons": [
+    {
+      "id": "lesson_001",
+      "date": "2026-02-26T15:29:37.813Z",
+      "category": "frontend",
+      "lesson": "Nunca usar CDN de Tailwind en produccion",
+      "applied_to_agent": null
+    },
+    {
+      "id": "lesson_002",
+      "date": "2026-02-26T15:29:37.981Z",
+      "category": "devops",
+      "lesson": "Siempre agregar .dockerignore con node_modules",
+      "applied_to_agent": null
+    }
+  ]
+}

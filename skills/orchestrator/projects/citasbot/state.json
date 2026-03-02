@@ -1,0 +1,18 @@
+{
+  "project_id": "citasbot",
+  "project_name": "CitasBot SaaS",
+  "description": "SaaS de gestión de citas con WhatsApp bot y pagos",
+  "current_phase": "build",
+  "health": "active",
+  "priority": 1,
+  "last_updated": "2026-02-26T14:58:21.886Z",
+  "stack": ["Next.js 16", "React 19", "Prisma", "PostgreSQL", "Paddle", "Twilio"],
+  "url": "https://github.com/cagr1/citasbot-whatsapp",
+  "metrics": {
+    "tasks_completed": 15,
+    "tasks_pending": 8,
+    "agents_used": ["backend-node", "citasbot-stack", "devops-ci"]
+  },
+  "current_blockers": [],
+  "top_priority": "Dashboard analytics"
+}

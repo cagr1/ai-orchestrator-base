@@ -1,0 +1,24 @@
+{
+  "name": "agents-orchestrator",
+  "version": "1.0.0",
+  "description": "Sistema de orquestación de agentes - El cerebro central",
+  "type": "module",
+  "bin": {
+    "pm": "./pm.js"
+  },
+  "scripts": {
+    "start": "node pm.js",
+    "status": "node pm.js status",
+    "next": "node pm.js next",
+    "list": "node pm.js list",
+    "context": "node pm.js context"
+  },
+  "keywords": [
+    "orchestrator",
+    "agents",
+    "project-management",
+    "mcp"
+  ],
+  "author": "Carlos",
+  "license": "MIT"
+}

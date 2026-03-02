@@ -1,0 +1,105 @@
+{
+  "project_id": "citasbot",
+  "tasks": [
+    {
+      "id": "task_001",
+      "title": "Multi-tenancy Core - Schema + Queries",
+      "description": "Implementar schema multi-tenant y queries optimizadas",
+      "status": "done",
+      "completed_at": "2026-02-15T10:00:00Z",
+      "agent_used": "backend-node",
+      "phase": 1,
+      "notes": "Schema con tenant_id en todas las tablas principales"
+    },
+    {
+      "id": "task_002",
+      "title": "NextAuth - Auth + Roles",
+      "description": "Implementar autenticación y roles (SUPER_ADMIN, ADMIN, STAFF)",
+      "status": "done",
+      "completed_at": "2026-02-16T14:00:00Z",
+      "agent_used": "backend-node",
+      "phase": 1,
+      "notes": "RBAC con 3 roles implementado"
+    },
+    {
+      "id": "task_003",
+      "title": "Paddle Integration - Billing LATAM",
+      "description": "Integrar Paddle para pagos con compliance LATAM (MoR)",
+      "status": "done",
+      "completed_at": "2026-02-18T16:00:00Z",
+      "agent_used": "citasbot-stack",
+      "phase": 2,
+      "notes": "Checkout working, webhooks configurados"
+    },
+    {
+      "id": "task_004",
+      "title": "WhatsApp Bot - Twilio",
+      "description": "Bot conversacional con Twilio WhatsApp",
+      "status": "done",
+      "completed_at": "2026-02-20T18:00:00Z",
+      "agent_used": "citasbot-stack",
+      "phase": 3,
+      "notes": "Funcional con intents básicos: menu, crear cita, cancelar"
+    },
+    {
+      "id": "task_005",
+      "title": "Dashboard Analytics Básico",
+      "description": "Dashboard con métricas básicas del negocio",
+      "status": "in_progress",
+      "started_at": "2026-02-26T09:00:00Z",
+      "agent_needed": ["frontend-react", "charts"],
+      "phase": 4,
+      "blockers": [],
+      "priority": "high"
+    },
+    {
+      "id": "task_006",
+      "title": "Email Notifications - Resend",
+      "description": "Notificaciones por email usando Resend",
+      "status": "pending",
+      "dependencies": ["task_005"],
+      "agent_needed": ["backend-node", "resend"],
+      "phase": 4,
+      "priority": "medium"
+    },
+    {
+      "id": "task_007",
+      "title": "Performance Optimization - N+1 Queries",
+      "description": "Optimizar queries Prisma N+1",
+      "status": "pending",
+      "agent_needed": ["backend-node"],
+      "phase": 4,
+      "priority": "medium"
+    },
+    {
+      "id": "task_008",
+      "title": "Backend Tests - Coverage >80%",
+      "description": "Tests para endpoints críticos",
+      "status": "pending",
+      "agent_needed": ["testing"],
+      "phase": 4,
+      "priority": "medium"
+    },
+    {
+      "id": "task_009",
+      "title": "Beta Testing - 5 Negocios",
+      "description": "Conseguir 5 negocios reales para beta testing",
+      "status": "pending",
+      "phase": 4,
+      "priority": "high",
+      "notes": "No requiere agente técnico"
+    },
+    {
+      "id": "task_010",
+      "title": "Mobile App - React Native",
+      "description": "App móvil futura",
+      "status": "pending",
+      "phase": 5,
+      "priority": "low",
+      "notes": "Futuro, no prioritario"
+    }
+  ],
+  "completed_count": 4,
+  "in_progress_count": 1,
+  "pending_count": 5
+}

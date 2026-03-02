@@ -1,0 +1,71 @@
+{
+  "project_id": "citasbot",
+  "decisions": [
+    {
+      "id": "dec_001",
+      "date": "2026-02-10T10:00:00Z",
+      "category": "billing",
+      "title": "Usar Paddle en lugar de Stripe",
+      "decision": "Usar Paddle como procesador de pagos",
+      "rationale": "MoR (Merchant of Record) simplifica taxes para Ecuador y LATAM. Stripe requiere setup fiscal complejo.",
+      "alternatives_considered": ["Stripe", "LemonSqueezy", "PayPal"],
+      "consequences": "Comisión más alta (~5%) pero sin gestión fiscal manual",
+      "status": "accepted"
+    },
+    {
+      "id": "dec_002",
+      "date": "2026-02-10T11:00:00Z",
+      "category": "database",
+      "title": "Supabase PostgreSQL",
+      "decision": "Usar Supabase como hosting de PostgreSQL",
+      "alternatives_considered": ["Railway", "Render", "Neon"],
+      "rationale": "Postgres managed + auth helpers + row level security + gratis tier decente",
+      "consequences": "Acoplado a ecosistema Supabase pero simplifica auth",
+      "status": "accepted"
+    },
+    {
+      "id": "dec_003",
+      "date": "2026-02-10T12:00:00Z",
+      "category": "deployment",
+      "title": "Vercel + Supabase",
+      "decision": "Frontend en Vercel, Backend en Vercel (Next.js API)",
+      "alternatives_considered": ["Railway", "Render", "VPS"],
+      "rationale": "Edge functions + caching integrado con Next.js. RDS/Supabase para DB.",
+      "consequences": "Límites en Vercel Pro pero suficientes para MVP",
+      "status": "accepted"
+    },
+    {
+      "id": "dec_004",
+      "date": "2026-02-12T09:00:00Z",
+      "category": "database",
+      "title": "Prisma ORM",
+      "decision": "Usar Prisma como ORM",
+      "alternatives_considered": ["Drizzle", "raw SQL", "TypeORM"],
+      "rationale": "Type safety + migrations automáticas + DX excelente",
+      "consequences": "Runtime overhead menor que typeorm, learning curve baja",
+      "status": "accepted"
+    },
+    {
+      "id": "dec_005",
+      "date": "2026-02-14T10:00:00Z",
+      "category": "auth",
+      "title": "RBAC Granular para STAFF",
+      "decision": "Permisos configurables por ADMIN para rol STAFF",
+      "alternatives_considered": ["Permisos binarios", "Solo ADMIN"],
+      "rationale": "Negocios requieren que staff tenga acceso parcial configurable",
+      "consequences": "Mayor complejidad pero más flexible para diferentes negocios",
+      "status": "accepted"
+    },
+    {
+      "id": "dec_006",
+      "date": "2026-02-18T14:00:00Z",
+      "category": "messaging",
+      "title": "Twilio WhatsApp",
+      "decision": "Usar Twilio para WhatsApp Business API",
+      "alternatives_considered": ["Meta Cloud API", "Chat API", "360dialog"],
+      "rationale": "Documentación estable, SDK maduro, pricing razonable",
+      "consequences": "Requiere aprobación de Meta Business",
+      "status": "accepted"
+    }
+  ]
+}
