@@ -16,6 +16,23 @@ Tu trabajo siempre alterna entre:
 - `init` y control de estado: Terminal
 - `planner/executor/qa/reviewer/memory`: Chat de Kilo.ai
 
+### Modo Chat-Only (recomendado)
+
+Si quieres usar TODO desde el chat (sin cambiar manualmente entre terminal/chat), pide a Kilo.ai que ejecute comandos y edite archivos en bucle.
+
+Prompt recomendado:
+
+```text
+Trabaja en E:\\Carlos\\Development Tools\\Proyectos\\Ehdu\\.agents.
+1) Ejecuta: node runner.js start "Execute plans/premium-upgrade-plan.md for EHDU in phases, preserving design and optimizing performance."
+2) Lee la salida del runner y ejecuta la accion requerida (Planner/Executor/QA/Reviewer/Memory).
+3) Despues de cada accion, ejecuta: node runner.js next
+4) Repite hasta phase=complete o halted=true.
+5) Al final muestra resumen con:
+   - node runner.js status
+   - system/runs/<run_id>/summary.md
+```
+
 ---
 
 ## Requisitos Previos
@@ -40,6 +57,12 @@ En Terminal:
 
 ```bash
 node scripts/init-project.js "Tu objetivo del proyecto"
+```
+
+Alternativa directa (init + primera accion en un comando):
+
+```bash
+node runner.js start "Tu objetivo del proyecto"
 ```
 
 Ejemplo:
@@ -237,6 +260,7 @@ Cuando termine:
 
 ```bash
 node runner.js init "objetivo"   # Inicializa run limpio
+node runner.js start "objetivo"  # Init + ejecuta primer next
 node runner.js status              # Estado actual
 node runner.js next                # Ejecuta solo 1 paso
 node runner.js "objetivo"         # Run completo (seguira pidiendo acciones)

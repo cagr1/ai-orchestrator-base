@@ -791,7 +791,7 @@ const runLoop = async (goalFromArgs) => {
 const main = async () => {
   const args = process.argv.slice(2);
   const command = (args[0] || '').toLowerCase();
-  const knownCommands = new Set(['init', 'status', 'next']);
+  const knownCommands = new Set(['init', 'start', 'status', 'next']);
 
   console.log('\n[RUNNER] Agent System Runner v1.1');
   console.log('============================');
@@ -804,6 +804,17 @@ const main = async () => {
     const state = initializeState(goal, config);
     console.log(`[INIT] New run initialized: ${state.run_id}`);
     console.log('\n[END] Runner finished\n');
+    return;
+  }
+
+  if (command === 'start') {
+    const goal = args.slice(1).join(' ').trim() || 'Define project goal here';
+    const config = readJSON(CONFIG_FILE);
+    writeFile(GOAL_FILE, `# Goal\n\n${goal}\n`);
+    resetRunArtifacts();
+    const state = initializeState(goal, config);
+    console.log(`[INIT] New run initialized: ${state.run_id}`);
+    await runOneStep();
     return;
   }
 
