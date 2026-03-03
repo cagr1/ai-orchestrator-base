@@ -356,6 +356,144 @@ const loadEvidence = (taskId) => {
 };
 
 // ============================================================
+// PHASE 11: R9 TASK SIZE VALIDATION
+// ============================================================
+
+const validateTaskSize = (task) => {
+  const errors = [];
+  
+  // Validate output files count
+  const outputFiles = task.output?.length ?? 0;
+  if (outputFiles > 10) {
+    errors.push(`output files (${outputFiles}) > 10`);
+  }
+  
+  // Validate input files count
+  const inputFiles = task.input?.length ?? 0;
+  if (inputFiles > 10) {
+    errors.push(`input files (${inputFiles}) > 10`);
+  }
+  
+  // Validate description length (proxy for complexity)
+  const descLength = task.description?.length ?? 0;
+  if (descLength > 500) {
+    errors.push(`description too long (${descLength} chars)`);
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+};
+
+const validateAllTasks = (tasks) => {
+  const violations = [];
+  
+  tasks.forEach(task => {
+    const validation = validateTaskSize(task);
+    if (!validation.valid) {
+      violations.push({
+        task_id: task.id,
+        errors: validation.errors
+      });
+    }
+  });
+  
+  if (violations.length > 0) {
+    console.error("[ERROR] R9 Task Size violations detected:");
+    violations.forEach(v => {
+      console.error(`  Task ${v.task_id}: ${v.errors.join(", ")}`);
+    });
+    console.error("[ERROR] Planner must split these tasks before proceeding.");
+    throw new Error("R9_VALIDATION_FAILED");
+  }
+};
+
+// ============================================================
+// PHASE 12: COMPLETION DETECTION
+// ============================================================
+
+const checkProjectCompletion = (tasks, state) => {
+  const remaining = tasks.filter(t => t.estado !== "done");
+  
+  if (remaining.length === 0) {
+    state.phase = "completed";
+    state.status = "completed";
+    state.halt_reason = "all_tasks_completed";
+    return true;
+  }
+  
+  return false;
+};
+
+// ============================================================
+// PHASE 13: DEPENDENCY VALIDATION
+// ============================================================
+
+const validateDependencies = (tasks) => {
+  const ids = new Set(tasks.map(t => t.id));
+  
+  tasks.forEach(task => {
+    task.depends_on.forEach(dep => {
+      if (!ids.has(dep)) {
+        throw new Error(
+          `Invalid dependency ${dep} in task ${task.id}`
+        );
+      }
+    });
+  });
+};
+
+const detectCycles = (tasks) => {
+  const graph = {};
+  tasks.forEach(t => {
+    graph[t.id] = t.depends_on;
+  });
+  
+  const visited = new Set();
+  const stack = new Set();
+  
+  const visit = (node) => {
+    if (stack.has(node)) {
+      throw new Error(`Dependency cycle detected at ${node}`);
+    }
+    if (visited.has(node)) return;
+    
+    stack.add(node);
+    graph[node].forEach(visit);
+    stack.delete(node);
+    visited.add(node);
+  };
+  
+  Object.keys(graph).forEach(visit);
+};
+
+// ============================================================
+// PHASE 14: R10 NO IMPLICIT TASKS (Anti-Hallucination)
+// ============================================================
+
+const validateEvidenceAgainstTask = (task, evidence) => {
+  const allowed = new Set(task.output);
+  
+  evidence.files_changed.forEach(file => {
+    let allowedMatch = false;
+    
+    allowed.forEach(path => {
+      if (file.startsWith(path)) {
+        allowedMatch = true;
+      }
+    });
+    
+    if (!allowedMatch) {
+      throw new Error(
+        `Unauthorized file change: ${file}. ` +
+        `Only allowed: ${Array.from(allowed).join(", ")}`
+      );
+    }
+  });
+};
+
+// ============================================================
 // PHASE 10: RECALCULATION RULE
 // ============================================================
 
@@ -526,5 +664,15 @@ module.exports = {
   saveEvidence,
   loadEvidence,
   // Phase 10
-  recalculateTaskStates
+  recalculateTaskStates,
+  // Phase 11
+  validateTaskSize,
+  validateAllTasks,
+  // Phase 12
+  checkProjectCompletion,
+  // Phase 13
+  validateDependencies,
+  detectCycles,
+  // Phase 14
+  validateEvidenceAgainstTask
 };

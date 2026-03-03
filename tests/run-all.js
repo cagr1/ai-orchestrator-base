@@ -4,6 +4,7 @@ try {
   require('./phase1_state.test');
   require('./phase4_batch.test');
   require('./phase10_recalc.test');
+  require('./phase11-14_validation.test');
   
   console.log("\n=== ALL TESTS PASSED ===");
   process.exit(0);
