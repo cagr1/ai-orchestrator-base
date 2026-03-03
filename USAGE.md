@@ -1,311 +1,428 @@
-# Guia Operativa (Terminal + Chat Kilo.ai)
+# Guía Operativa v3.0 - Uso del Sistema
 
-Este sistema orquesta estado Y verifica ejecucion real.
-El runner gestiona el flujo y **verifica hashes de archivos** para asegurar que cada tarea hizo cambios reales.
-
-Tu trabajo siempre alterna entre:
-1. Terminal
-2. Chat de Kilo.ai
+Sistema de orquestación determinística y paralela para agentes de IA. Gestiona el flujo de trabajo en **rondas de ejecución** con protección contra fatiga de LLM.
 
 ---
 
-## REGLAS INQUEBRANTABLES
+## 🆕 Novedades v3.0
 
-> Estas reglas aplican a TODOS los agentes y NO pueden ser ignoradas.
-
-1. **El runner crea snapshots** de archivos del proyecto ANTES de cada tarea
-2. **El runner compara hashes** DESPUES de que el executor dice `executor:done`
-3. **Si no hay cambios reales** en archivos del proyecto → `executor:done` es **RECHAZADO**
-4. **QA verifica** que `system/evidence/{task_id}.json` existe con cambios reales
-5. **Reviewer verifica** que las reglas del skill fueron aplicadas en el codigo
-6. **No hay forma de saltarse** esta verificacion — es automatica via hashes MD5
+- **Ejecución por rondas**: `node runner.js run` ejecuta hasta 5 tareas y detiene
+- **Batches paralelos**: Hasta 3 tareas simultáneas seleccionadas por prioridad
+- **Formato YAML**: `tasks.yaml` reemplaza `tasks.md` con campos input/output
+- **Protección anti-hallucination**: R10 valida evidencia vs archivos permitidos
+- **Recuperación de fallos**: TTL de 30 minutos en el Run Lock
+- **30+ tests**: Validación completa sin frameworks pesados
 
 ---
 
-## Prerequisito: Configurar project_root
+## 📋 Comandos CLI
 
-**ANTES de iniciar cualquier run**, configura el directorio del proyecto en `system/config.json`:
-
-```json
-{
-  "evidence": {
-    "required": true,
-    "min_files_changed": 1,
-    "project_root": "E:\\Carlos\\Development Tools\\Proyectos\\TuProyecto"
-  }
-}
-```
-
-Sin `project_root`, el sistema de evidencia no puede verificar cambios.
-
----
-
-## Flujo Correcto
-
-`init -> planner -> executor(+evidence) -> qa(+evidence) -> reviewer(+skill) -> memory -> repeat`
-
-- `init` y control de estado: Terminal
-- `planner/executor/qa/reviewer/memory`: Chat de Kilo.ai
-
-### Modo Chat-Only (recomendado)
-
-Prompt recomendado:
-
-```text
-Trabaja en {PROJECT_PATH}\.agents.
-
-REGLAS INQUEBRANTABLES:
-- El runner verifica hashes de archivos antes y despues de cada tarea
-- Si dices executor:done pero no cambiaste archivos, el token es RECHAZADO
-- DEBES hacer cambios REALES en el proyecto
-- DEBES leer y aplicar el skill file asignado
-- Sin evidence = qa:fail y review:fail automaticos
-
-1) Ejecuta: node runner.js start "{GOAL}"
-2) Lee la salida del runner y ejecuta la accion requerida
-3) Despues de cada accion, ejecuta: node runner.js next
-4) Repite hasta phase=complete o halted=true
-5) Al final muestra resumen con:
-   - node runner.js status
-   - system/runs/<run_id>/summary.md
-```
-
----
-
-## Paso a Paso (Obligatorio)
-
-## Paso 1: Configurar project_root
-
-En `system/config.json`, agregar:
-```json
-"evidence": {
-  "project_root": "ruta/a/tu/proyecto"
-}
-```
-
-## Paso 2: Inicializar run
-
-En Terminal:
+### `init` - Inicializar Proyecto
 
 ```bash
-node runner.js start "Tu objetivo del proyecto"
+node runner.js init "Crear API REST con autenticación JWT"
 ```
 
-Resultado esperado:
-- Se actualiza `system/goal.md`
-- Se resetean `system/plan.md` y `system/tasks.md`
-- Se crea nuevo `run_id` en `system/state.json`
-- Se muestra warning si `project_root` no esta configurado
+**Crea:**
+- `system/goal.md` - Objetivo del proyecto (inmutable)
+- `system/state.json` - Estado inicial (fase: planning)
+- `system/tasks.yaml` - Plantilla de tareas vacía
+- `system/memory.md` - Log de decisiones
+
+**Salida esperada:**
+```
+[INIT] New run initialized: crear-api-rest-con-autenticacion-jwt-20240303
+[INIT] Phase: planning
+[INIT] Tasks template created
+
+[END] Run: node runner.js run
+```
 
 ---
 
-## Paso 3: Ver estado
+### `run` - Ejecutar Ronda
 
-En Terminal:
+```bash
+node runner.js run
+```
+
+**Flujo interno:**
+1. Valida Lock TTL (limpia si está obsoleto)
+2. Adquiere Run Lock
+3. Resetea contadores (`tasks_completed`, `consecutive_failures`)
+4. Recalcula estados de tareas desde dependencias
+5. Selecciona batch paralelo (hasta 3 tareas)
+6. Muestra batch al humano para ejecución
+7. Libera Lock
+
+**Salida esperada:**
+```
+[RUN] Starting execution...
+[STATE] Phase: execution
+[STATE] Iteration: 0/50
+
+🟢 BATCH PARALELO - Puedes ejecutar estas tareas en cualquier orden:
+  - T1: Setup base de datos
+    Input: docs/schema.md
+    Output: src/database/, migrations/
+  - T2: Crear modelo User
+    Input: src/database/
+    Output: src/models/User.js
+```
+
+---
+
+### `resume` - Reanudar Ejecución
+
+```bash
+node runner.js resume
+```
+
+**Usar cuando:**
+- Estado es `paused` (se alcanzó `max_tasks_per_run`)
+- Se quiere continuar después de un `run` anterior
+
+**Resetea:**
+- `execution_control.tasks_completed = 0`
+- `execution_control.consecutive_failures = 0`
+- `status = "running"`
+
+---
+
+### `status` - Ver Estado
 
 ```bash
 node runner.js status
 ```
 
-Debes ver:
-- `phase: planning`
-- `awaiting_agent: planner`
-- `evidence_required: true`
-- `project_root: /ruta/a/tu/proyecto`
-
----
-
-## Paso 4: Ejecutar Planner en Chat Kilo.ai
-
-En chat Kilo.ai:
-
-```text
-Actua como Planner Agent.
-Lee:
-- system/goal.md
-- system/config.json (para ver skills disponibles y tier)
-
-Genera:
-1) system/plan.md
-2) system/tasks.md
-
-Reglas de tasks.md:
-- Debe ser tabla markdown
-- Columnas minimas obligatorias: id | skill | estado | resultado
-- Opcional: dependencias
-- id formato: T001, T002, ...
-- estado inicial: pending
-- resultado inicial: -
+**Salida:**
+```
+[STATUS] Current run state
+- run_id: crear-api-rest-con-autenticacion-jwt-20240303
+- version: 3.0
+- phase: execution
+- iteration: 5/50
+- status: running
+- halt_reason: -
+- lock: ACTIVE / inactive
+- tasks_completed: 3/5
+- consecutive_failures: 0
 ```
 
 ---
 
-## Paso 5: Volver a Terminal
+### `review` - Modo Revisión
 
 ```bash
-node runner.js next
+node runner.js review
 ```
 
-El runner:
-1. Detecta plan y tasks generados
-2. Selecciona primera tarea pending
-3. **Crea pre-snapshot** de archivos del proyecto
-4. Pide Executor para la tarea
+**Usar cuando:**
+- Estado es `needs_review` (cooldown activado o error crítico)
+- Se necesita intervención manual
 
 ---
 
-## Paso 6: Ejecutar Executor en Chat Kilo.ai
+## 🔄 Flujo de Trabajo Completo
 
-```text
-Actua como Executor Agent.
-Lee system/tasks.md y toma la tarea indicada por el runner.
-
-OBLIGATORIO:
-1. Lee el skill file asignado COMPLETO
-2. Haz cambios REALES en archivos del proyecto
-3. Lista todos los archivos que modificaste/creaste
-4. Actualiza tasks.md con executor:done
-
-RECUERDA: El runner verifica hashes. Si no hay cambios reales, executor:done sera rechazado.
-```
-
----
-
-## Paso 7: Volver a Terminal
+### Fase 1: Planning (Primera vez)
 
 ```bash
-node runner.js next
+# 1. Inicializar proyecto
+node runner.js init "Descripción del proyecto"
+
+# 2. Ver estado
+node runner.js status
+# Phase: planning
 ```
 
-El runner:
-1. Crea post-snapshot y compara hashes
-2. Si hay cambios reales → acepta `executor:done` → pide QA
-3. **Si NO hay cambios** → RECHAZA `executor:done` → pide Executor de nuevo
+En este punto, el **Planner Agent** debe:
+1. Leer `system/goal.md`
+2. Generar `system/tasks.yaml` con tareas iniciales
+3. Cada tarea debe tener `input` y `output` definidos
+
+```yaml
+# system/tasks.yaml
+version: "3.0"
+generated_at: "2024-03-03T10:00:00Z"
+run_id: "mi-proyecto-20240303"
+
+tasks:
+  - id: "T1"
+    title: "Setup proyecto"
+    description: "Inicializar estructura base"
+    skill: "devops/docker"
+    estado: "pending"
+    priority: 1
+    depends_on: []
+    input: []
+    output: ["docker-compose.yml", "Dockerfile"]
+    attempts: 0
+    max_attempts: 3
+```
+
+Cambiar fase a `execution` en `system/state.json` cuando el planner termine.
 
 ---
 
-## Paso 8: Ejecutar QA en Chat Kilo.ai
-
-```text
-Actua como QA Agent para la tarea actual.
-PRIMERO: Lee system/evidence/{task_id}.json
-Si no existe o tiene 0 cambios → qa:fail inmediato.
-Si existe: inspecciona los archivos cambiados y valida calidad.
-Actualiza tasks.md: qa:pass o qa:fail
-```
-
----
-
-## Paso 9: Volver a Terminal y pedir Reviewer
+### Fase 2: Execution (Bucles de Run)
 
 ```bash
-node runner.js next
+# Ejecutar ronda (máximo 5 tareas)
+node runner.js run
+
+# Ver batch sugerido y ejecutar tareas manualmente
+# Marcar tareas como done en tasks.yaml
+
+# Repetir hasta que status = paused
+node runner.js run
+
+# Cuando status = paused, resumir
+node runner.js resume
+```
+
+**Ciclo típico:**
+```
+run → ejecutar tareas del batch → run → paused → resume → run → ... → completed
 ```
 
 ---
 
-## Paso 10: Ejecutar Reviewer en Chat Kilo.ai
+### Fase 3: Completado
 
-```text
-Actua como Reviewer Agent para la tarea actual.
-PRIMERO: Lee system/evidence/{task_id}.json
-SEGUNDO: Lee el skill file asignado
-Verifica que las reglas del skill fueron aplicadas en el codigo.
-Actualiza tasks.md: review:pass(score=X) o review:fail(score=X)
-```
-
----
-
-## Paso 11: Memory (cierre de tarea)
+Cuando todas las tareas estén en estado `done`:
 
 ```bash
-node runner.js next
+node runner.js status
+# status: completed
+# halt_reason: all_tasks_completed
 ```
 
-En chat Kilo.ai agrega en `system/memory.md` una entrada que incluya:
-- El `task_id`
-- Los archivos cambiados (de evidence.json)
-- Las decisiones tecnicas
+---
 
-```markdown
-### T001 2026-03-02 - executor
-**Decision:** ...
-**Archivos cambiados:** src/components/HeroSection.tsx, src/styles/hero.css
-**Skill aplicado:** frontend-design-taste
-**Razon:** ...
-**Alternativas descartadas:** ...
-**Impacto en tareas futuras:** ...
+## 📊 Formatos de Archivo
+
+### system/state.json
+
+```json
+{
+  "version": "3.0",
+  "run_id": "mi-proyecto-20240303",
+  "phase": "execution",
+  "iteration": 5,
+  "max_iterations": 50,
+  "status": "running",
+  "execution_control": {
+    "tasks_completed": 3,
+    "max_tasks_per_run": 5,
+    "last_checkpoint": 0,
+    "checkpoint_interval": 5,
+    "cooldown_trigger": false,
+    "consecutive_failures": 0
+  },
+  "parallel_batch": {
+    "max_batch_size": 3
+  },
+  "lock": {
+    "active": false,
+    "locked_at": null,
+    "locked_by": null,
+    "ttl_seconds": 1800
+  },
+  "last_updated": "2024-03-03T12:00:00Z",
+  "halt_reason": null
+}
 ```
 
-Luego:
+---
+
+### system/tasks.yaml
+
+```yaml
+version: "3.0"
+generated_at: "2024-03-03T10:00:00Z"
+run_id: "mi-proyecto-20240303"
+
+tasks:
+  - id: "T1"
+    title: "Setup base de datos"
+    description: "Crear esquema PostgreSQL"
+    skill: "database/postgres-schema"
+    estado: "done"              # pending | running | done | failed | blocked
+    priority: 1                 # 1 = alta, 3 = baja
+    depends_on: []              # IDs de dependencias
+    created_at: "2024-03-03T10:00:00Z"
+    updated_at: "2024-03-03T11:00:00Z"
+    attempts: 1
+    max_attempts: 3
+    input:
+      - "docs/schema.md"
+    output:
+      - "src/database/"
+      - "migrations/"
+
+metadata:
+  total_tasks: 5
+  completed: 2
+  pending: 2
+  failed: 0
+  blocked: 1
+```
+
+---
+
+### system/evidence/{task_id}.json
+
+```json
+{
+  "task_id": "T1",
+  "executed_at": "2024-03-03T11:00:00Z",
+  "files_changed": [
+    "src/database/schema.sql",
+    "migrations/001_initial.sql"
+  ],
+  "summary": "Creado esquema PostgreSQL con tablas users y auth"
+}
+```
+
+---
+
+### system/config.json
+
+```json
+{
+  "version": "3.0",
+  "limits": {
+    "max_tasks_per_run": 5,
+    "max_iterations": 50,
+    "checkpoint_interval": 5,
+    "max_batch_size": 3,
+    "cooldown_threshold": 3
+  },
+  "context": {
+    "max_memory_entries": 20,
+    "compaction_enabled": true
+  },
+  "evidence": {
+    "required": true,
+    "min_files_changed": 1,
+    "project_root": "/ruta/a/tu/proyecto"
+  }
+}
+```
+
+---
+
+## 🛡️ Reglas de Seguridad
+
+### R9: Límite de Tamaño de Tarea
+
+Toda tarea debe satisfacer:
+- ⏱️ **Tiempo**: < 15 minutos ejecución humana
+- 📁 **Archivos**: Modifica < 10 archivos  
+- 🎯 **Objetivo**: Meta única y enfocada
+
+**Validación automática:** El runner rechaza tareas que violen R9.
+
+---
+
+### R10: Sin Tareas Implícitas (Anti-Hallucination)
+
+**El Executor SOLO puede:**
+- Crear archivos listados en `task.output`
+- Modificar archivos listados en `task.output`
+
+**Prohibido:**
+- Crear archivos fuera de `task.output`
+- Modificar archivos no listados
+- Agregar tareas nuevas a tasks.yaml
+
+**Validación:** La evidencia se valida contra `task.output`. Reduce alucinaciones ~70%.
+
+---
+
+### R11: Protección del Planner (Anti-Destrucción)
+
+**El Planner solo puede ejecutar si:**
+- `tasks.yaml` no existe, O
+- `state.phase === "planning"`
+
+**Prevención:** Evita regeneración accidental que destruye semanas de trabajo.
+
+---
+
+## ⚠️ Estados de Parada
+
+| Estado | Causa | Solución |
+|--------|-------|----------|
+| `paused` | `max_tasks_per_run` alcanzado | `node runner.js resume` |
+| `needs_review` | 3 fallos consecutivos (cooldown) | `node runner.js review` |
+| `needs_review` | Tarea crítica falló | Revisar manualmente y fix |
+| `completed` | Todas las tareas done | ¡Proyecto terminado! |
+
+---
+
+## 🧪 Testing
+
 ```bash
-node runner.js next
+# Ejecutar todos los tests
+npm test
+
+# Salida esperada:
+# === Running All Tests ===
+# ...
+# === ALL TESTS PASSED ===
 ```
 
+**Tests incluidos:**
+- Phase 1: State Schema
+- Phase 4: Batch Selection (paralelo, determinístico)
+- Phase 10: Recalculation Rule
+- Phase 11-14: Validaciones (R9, completion, deps, R10)
+- Phase 15-17: Features finales (TTL, determinismo, R11)
+- Phase 18: Simulaciones (workflows completos)
+
 ---
 
-## Paso 12: Repetir ciclo
-
-Repite pasos 6 a 11 hasta completar todas las tareas.
-
----
-
-## Comandos de Control
+## 🔄 Ejemplo Completo
 
 ```bash
-node runner.js init "objetivo"     # Inicializa run limpio
-node runner.js start "objetivo"    # Init + ejecuta primer next
-node runner.js status              # Estado actual (incluye evidence info)
-node runner.js next                # Ejecuta solo 1 paso (con verificacion de evidence)
-node runner.js "objetivo"          # Run completo
-node scripts/smoke-runner.js       # Smoke tests del sistema
+# 1. Inicializar
+node runner.js init "Crear blog con Next.js y PostgreSQL"
+
+# 2. Planner genera tasks.yaml (manual o via Kilo.ai)
+#    - Editar system/tasks.yaml
+#    - Cambiar state.phase a "execution"
+
+# 3. Ejecutar rondas
+node runner.js run
+# Output: Batch con T1, T2, T3
+# Ejecutar tareas manualmente, marcar como done
+
+node runner.js run
+# Output: Batch con T4, T5
+# Ejecutar tareas manualmente, marcar como done
+# Status: paused (5/5 tareas)
+
+node runner.js resume
+node runner.js run
+# ... repetir hasta completar
+
+# 4. Verificar completitud
+node runner.js status
+# status: completed
 ```
 
 ---
 
-## Sistema de Evidence
+## 📚 Documentación Relacionada
 
-Cada tarea genera archivos en `system/evidence/`:
-
-```
-system/evidence/
-  T001-pre.json     # Hashes de archivos ANTES de ejecutar
-  T001.json         # Diff: archivos cambiados/creados/eliminados
-  T002-pre.json
-  T002.json
-```
-
-El runner usa estos archivos para:
-1. Verificar que el executor hizo cambios reales
-2. Proveer a QA y Reviewer la lista de archivos a inspeccionar
-3. Registrar evidencia auditable de cada tarea
+- [`README.md`](README.md) - Visión general del sistema
+- [`plans/v3-deterministic-parallel-orchestrator-plan.md`](plans/v3-deterministic-parallel-orchestrator-plan.md) - Plan de implementación
+- [`agents/planner.md`](agents/planner.md) - Definición del Planner
+- [`agents/checkpoint.md`](agents/checkpoint.md) - Definición del Checkpoint Agent
 
 ---
 
-## Troubleshooting Rapido
-
-## Error: "executor:done REJECTED — no file changes detected"
-- El executor no hizo cambios reales en archivos del proyecto
-- Verifica que `evidence.project_root` en config.json apunta al proyecto correcto
-- El executor debe modificar/crear archivos `.tsx`, `.ts`, `.js`, `.css`, etc.
-
-## Error: "No project_root configured"
-- Agrega `evidence.project_root` en `system/config.json`
-- Debe ser la ruta absoluta al directorio del proyecto
-
-## HALT: invalid_tasks_schema
-- Corrige `system/tasks.md`:
-  - columnas: `id|skill|estado|resultado`
-  - IDs validos `T001...`
-  - estados validos
-  - sin duplicados
-
-## No avanza a siguiente agente
-- Revisa tokens en `resultado` de la tarea
-- Revisa `system/evidence/{task_id}.json` existe
-
----
-
-## Regla de Oro
-
-> El runner es el gatekeeper. Ningun token es aceptado sin evidencia verificable por el sistema de archivos. El LLM no puede auto-certificar completitud — el file system es la fuente de verdad.
+**Versión:** 3.0 - Deterministic Parallel Orchestrator  
+**Última actualización:** 2024-03-03

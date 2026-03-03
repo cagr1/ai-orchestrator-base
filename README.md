@@ -358,4 +358,4 @@ Editar `system/config.json`:
 
 ---
 
-**Desarrollado con ❤️ por la comunidad AI-Orchestrator**
+**Desarrollado con ❤️ por Carlos Gallardo**
