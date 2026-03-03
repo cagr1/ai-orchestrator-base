@@ -1,27 +1,27 @@
 {
-  "version": "1.1",
-  "run_id": null,
+  "version": "3.0",
+  "run_id": "test-goal-20260303",
   "phase": "planning",
   "iteration": 0,
-  "max_iterations": 20,
+  "max_iterations": 50,
   "status": "running",
-  "current_task_id": null,
-  "awaiting_agent": "planner",
-  "completed_tasks": [],
-  "failed_tasks": [],
-  "skipped_tasks": [],
-  "halted": false,
-  "halt_reason": null,
-  "last_agent": "runner",
-  "last_action": "awaiting_planner_output",
-  "last_updated": null,
-  "metrics": {
-    "tasks_total": 0,
-    "tasks_done": 0,
-    "tasks_failed": 0,
-    "review_passes": 0,
-    "review_fails": 0,
-    "qa_passes": 0,
-    "qa_fails": 0
-  }
+  "execution_control": {
+    "tasks_completed": 0,
+    "max_tasks_per_run": 5,
+    "last_checkpoint": 0,
+    "checkpoint_interval": 5,
+    "cooldown_trigger": false,
+    "consecutive_failures": 0
+  },
+  "parallel_batch": {
+    "max_batch_size": 3
+  },
+  "lock": {
+    "active": false,
+    "locked_at": null,
+    "locked_by": null,
+    "ttl_seconds": 1800
+  },
+  "last_updated": "2026-03-03T02:51:27.907Z",
+  "halt_reason": null
 }

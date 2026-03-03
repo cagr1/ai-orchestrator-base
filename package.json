@@ -1,13 +1,17 @@
 {
   "name": "ai-orchestrator-base",
   "private": true,
-  "version": "1.2.0",
+  "version": "3.0.0",
   "type": "commonjs",
   "scripts": {
-    "init": "node scripts/init-project.js",
-    "start": "node runner.js start",
+    "init": "node runner.js init",
+    "run": "node runner.js run",
+    "resume": "node runner.js resume",
     "status": "node runner.js status",
-    "next": "node runner.js next",
-    "smoke": "node scripts/smoke-runner.js"
+    "review": "node runner.js review",
+    "test": "node tests/run-all.js"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
   }
 }

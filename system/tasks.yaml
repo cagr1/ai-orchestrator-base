@@ -1,0 +1,12 @@
+version: "3.0"
+generated_at: null
+run_id: null
+
+tasks: []
+
+metadata:
+  total_tasks: 0
+  completed: 0
+  pending: 0
+  failed: 0
+  blocked: 0
