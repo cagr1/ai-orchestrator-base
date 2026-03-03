@@ -3,6 +3,7 @@ console.log("=== Running All Tests ===\n");
 try {
   require('./phase1_state.test');
   require('./phase4_batch.test');
+  require('./phase10_recalc.test');
   
   console.log("\n=== ALL TESTS PASSED ===");
   process.exit(0);

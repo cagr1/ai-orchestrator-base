@@ -333,6 +333,57 @@ const onTaskFailure = (state) => {
 };
 
 // ============================================================
+// PHASE 7: EVIDENCE FORMAT (Simplified)
+// ============================================================
+
+const EVIDENCE_DIR = path.join(SYSTEM_DIR, 'evidence');
+
+const saveEvidence = (taskId, evidence) => {
+  ensureDir(EVIDENCE_DIR);
+  const evidenceFile = path.join(EVIDENCE_DIR, `${taskId}.json`);
+  const data = {
+    task_id: taskId,
+    executed_at: new Date().toISOString(),
+    files_changed: evidence.files_changed || [],
+    summary: evidence.summary || ''
+  };
+  writeJSON(evidenceFile, data);
+};
+
+const loadEvidence = (taskId) => {
+  const evidenceFile = path.join(EVIDENCE_DIR, `${taskId}.json`);
+  return readJSON(evidenceFile);
+};
+
+// ============================================================
+// PHASE 10: RECALCULATION RULE
+// ============================================================
+
+const recalculateTaskStates = (tasks) => {
+  const completedIds = new Set(
+    tasks.filter(t => t.estado === "done").map(t => t.id)
+  );
+  
+  tasks.forEach(task => {
+    // Never change done or failed
+    if (task.estado === "done" || task.estado === "failed") {
+      return;
+    }
+    
+    // Check dependencies
+    const depsDone = task.depends_on.every(depId => completedIds.has(depId));
+    
+    if (!depsDone) {
+      task.estado = "blocked";
+    } else if (task.estado === "blocked") {
+      task.estado = "pending";
+    }
+  });
+  
+  return tasks;
+};
+
+// ============================================================
 // CLI COMMANDS
 // ============================================================
 
@@ -470,5 +521,10 @@ module.exports = {
   // Phase 6
   checkCooldownTrigger,
   onTaskSuccess,
-  onTaskFailure
+  onTaskFailure,
+  // Phase 7
+  saveEvidence,
+  loadEvidence,
+  // Phase 10
+  recalculateTaskStates
 };
