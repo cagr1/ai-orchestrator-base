@@ -14,10 +14,17 @@
 | 8 | ✅ COMPLETE | Agent updates (checkpoint.md, planner.md) |
 | 9 | ✅ COMPLETE | CLI commands (init, run, resume, status, review) |
 | 10 | ✅ COMPLETE | Recalculation rule (blocked/pending based on deps) |
-| 11-20 | ⏳ PENDING | Remaining phases (R9, completion, deps, R10, R11, etc.) |
+| 11 | ✅ COMPLETE | R9 Task Size Validation (<10 files, <15 min, single objective) |
+| 12 | ✅ COMPLETE | Completion Detection (auto-detect when all tasks done) |
+| 13 | ✅ COMPLETE | Dependency Validation (existence + cycle detection) |
+| 14 | ✅ COMPLETE | R10 No Implicit Tasks (evidence validated against task.output) |
+| 15 | ✅ COMPLETE | Crash Recovery (Lock TTL validation for stale lock detection) |
+| 16 | ✅ COMPLETE | Deterministic Ordering (stable batch selection with id tie-breaker) |
+| 17 | ✅ COMPLETE | Rule R11: Planner Guardrail (anti-destruction, planner phase only) |
+| 18-20 | ⏳ PENDING | Final tests, documentation, full workflow simulation |
 
 **Last Updated:** 2026-03-03
-**Tests Status:** All phases 1, 4, 10 tests passing
+**Tests Status:** All 23 tests passing (phases 1, 4, 10, 11-14, 15-17)
 
 ## Development Rules
 
@@ -975,25 +982,25 @@ Prevents accidental destruction of weeks of work.
 
 ## Implementation Order
 
-1. **Phase 1**: Simplified state.json schema with Run Lock
-2. **Phase 2**: Create tasks.yaml with input/output
-3. **Phase 3**: Implement execution limits with reset
-4. **Phase 4**: Add parallel batch selection
-5. **Phase 5**: Simplified checkpoint system
-6. **Phase 6**: Cooldown with consecutive_failures
-7. **Phase 7**: Simplified evidence format
-8. **Phase 8**: Update agent definitions
-9. **Phase 9**: Update CLI commands
-10. **Phase 10**: File structure
-11. **Phase 11**: Add recalculation rule
-12. **Rule R9**: Add task size limits with validation
-13. **Phase 12**: Completion detection
-14. **Phase 13**: Dependency validation (existence + cycles)
-15. **Rule R10**: No implicit tasks validation
-16. **Phase 14**: Crash recovery (Lock TTL)
-17. **Phase 15**: Deterministic ordering
-18. **Rule R11**: Planner guardrail (anti-destruction)
-19. **Phase 16**: Test and documentation
+1. **Phase 1**: Simplified state.json schema with Run Lock ✅
+2. **Phase 2**: Create tasks.yaml with input/output ✅
+3. **Phase 3**: Implement execution limits with reset ✅
+4. **Phase 4**: Add parallel batch selection ✅
+5. **Phase 5**: Simplified checkpoint system ✅
+6. **Phase 6**: Cooldown with consecutive_failures ✅
+7. **Phase 7**: Simplified evidence format ✅
+8. **Phase 8**: Update agent definitions ✅
+9. **Phase 9**: Update CLI commands ✅
+10. **Phase 10**: File structure ✅
+11. **Phase 11**: Add recalculation rule ✅
+12. **Rule R9**: Add task size limits with validation ✅
+13. **Phase 12**: Completion detection ✅
+14. **Phase 13**: Dependency validation (existence + cycles) ✅
+15. **Rule R10**: No implicit tasks validation ✅
+16. **Phase 14**: Crash recovery (Lock TTL) ✅
+17. **Phase 15**: Deterministic ordering ✅
+18. **Rule R11**: Planner guardrail (anti-destruction) ✅
+19. **Phase 16**: Final tests and documentation
 
 ---
 

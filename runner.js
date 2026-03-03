@@ -494,6 +494,19 @@ const validateEvidenceAgainstTask = (task, evidence) => {
 };
 
 // ============================================================
+// PHASE 17: R11 PLANNER GUARDRAIL (Anti-Destruction)
+// ============================================================
+
+const validatePlannerAllowed = (state, tasksExists) => {
+  if (tasksExists && state.phase !== "planning") {
+    throw new Error(
+      "Planner not allowed after planning phase. " +
+      "Manual reset required to regenerate tasks."
+    );
+  }
+};
+
+// ============================================================
 // PHASE 10: RECALCULATION RULE
 // ============================================================
 
@@ -674,5 +687,7 @@ module.exports = {
   validateDependencies,
   detectCycles,
   // Phase 14
-  validateEvidenceAgainstTask
+  validateEvidenceAgainstTask,
+  // Phase 17
+  validatePlannerAllowed
 };
