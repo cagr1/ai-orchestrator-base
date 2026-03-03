@@ -10,10 +10,41 @@
 | 4 | ✅ COMPLETE | Parallel batch selection + Deterministic ordering |
 | 5 | ✅ COMPLETE | Simplified checkpoint system |
 | 6 | ✅ COMPLETE | Cooldown with consecutive_failures |
-| 7-20 | ⏳ PENDING | Remaining phases (evidence, validation, tests, etc.) |
+| 7 | ✅ COMPLETE | Evidence format (task_id, files_changed, summary) |
+| 8 | ✅ COMPLETE | Agent updates (checkpoint.md, planner.md) |
+| 9 | ✅ COMPLETE | CLI commands (init, run, resume, status, review) |
+| 10 | ✅ COMPLETE | Recalculation rule (blocked/pending based on deps) |
+| 11-20 | ⏳ PENDING | Remaining phases (R9, completion, deps, R10, R11, etc.) |
 
 **Last Updated:** 2026-03-03
-**Tests Status:** Phase 1 & 4 tests passing
+**Tests Status:** All phases 1, 4, 10 tests passing
+
+## Development Rules
+
+### Rule: Max 3 Phases per Session
+
+**CRITICAL:** Never implement more than 3 phases in a single development session.
+
+**Why:**
+- Prevents LLM collapse from context overflow
+- Allows proper testing between batches
+- Enables incremental commits to GitHub
+- Reduces risk of errors
+
+**Process:**
+1. Select up to 3 phases to implement
+2. Implement with tests
+3. Run `npm test` to verify
+4. Commit to GitHub
+5. Stop and wait for next session
+
+**Example:**
+```
+Session 1: Phases 1-3 + commit
+Session 2: Phases 4-6 + commit  
+Session 3: Phases 7-9 + commit
+...etc
+```
 
 ## Overview
 
