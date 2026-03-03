@@ -1,7 +1,7 @@
 ﻿# Planner Agent
 
 ## Rol
-Recibe el **goal** del usuario desde [`system/goal.md`](system/goal.md) y genera el plan de ejecucion desglosado en [`system/plan.md`](system/plan.md) y las tareas en [`system/tasks.md`](system/tasks.md).
+Recibe el **goal** del usuario desde [`system/goal.md`](system/goal.md) y genera el plan de ejecucion desglosado en [`system/plan.md`](system/plan.md) y las tareas en [`system/tasks.yaml`](system/tasks.yaml).
 
 ## Input
 - [`system/goal.md`](system/goal.md) - Objetivo inicial del usuario
@@ -11,7 +11,7 @@ Recibe el **goal** del usuario desde [`system/goal.md`](system/goal.md) y genera
 
 ## Output
 - [`system/plan.md`](system/plan.md) - Plan estructurado en fases (formato especifico)
-- [`system/tasks.md`](system/tasks.md) - Lista de tareas con estado inicial `pending`
+- [`system/tasks.yaml`](system/tasks.yaml) - Lista de tareas con estado inicial `pending` (formato YAML)
 
 ## Formato de Salida: system/plan.md
 
@@ -127,7 +127,7 @@ FASE 4 depende de: FASE 3
 
 ### 4. Generacion de Tareas
 
-Crear [`system/tasks.md`](system/tasks.md) en formato de tabla con **complejidad**:
+Crear [`system/tasks.yaml`](system/tasks.yaml) en formato YAML con **input/output**:
 
 ```markdown
 # Tasks
@@ -233,8 +233,9 @@ Eres el Planner Agent. Tu trabajo es:
    FASE 2 depende de: FASE 1
    ...
 
-6. Crear tareas detalladas en system/tasks.md vinculadas a cada fase
-   - Incluir columna "complexity" (1-4) segun la dificultad
+6. Crear tareas detalladas en system/tasks.yaml vinculadas a cada fase
+   - Incluir campos "input" y "output" para cada tarea
+   - Definir "depends_on" para establecer dependencias
    - Tareas complejas (complexity 3-4) usan skills expertos del tier
 
 Skills disponibles por tier: {{skills_enabled}}
@@ -272,17 +273,67 @@ planner.md  iteracion {{iteration}}
 {{dependent_phase}} depende de: {{prerequisite_phases}}
 ```
 
-### Salida: system/tasks.md (Plantilla)
-```markdown
-# Tasks
+### Salida: system/tasks.yaml (Formato v3.0)
 
-## {{task_id}} - [{{task_status}}] {{task_title}}
-**Fase:** {{phase_number}}
-**Skill:** {{skill_name}}
-**Dependencias:** {{dependency_list}}
-**Criterios:**
-- [ ] {{acceptance_criterion_1}}
-- [ ] {{acceptance_criterion_2}}
-- [ ] {{acceptance_criterion_3}}
+**IMPORTANTE:** Usar formato YAML (no markdown tabla)
+
+```yaml
+version: "3.0"
+generated_at: "2024-01-01T00:00:00Z"
+run_id: "{{run_id}}"
+
+tasks:
+  - id: "T1"
+    title: "{{task_title}}"
+    description: "{{task_description}}"
+    skill: "{{skill_name}}"
+    estado: "pending"
+    priority: 1
+    depends_on: []
+    created_at: "{{timestamp}}"
+    updated_at: "{{timestamp}}"
+    attempts: 0
+    max_attempts: 3
+    input:
+      - "{{input_file_1}}"
+      - "{{input_file_2}}"
+    output:
+      - "{{output_file_1}}"
+      - "{{output_file_2}}"
+  
+  - id: "T2"
+    title: "{{task_title}}"
+    description: "{{task_description}}"
+    skill: "{{skill_name}}"
+    estado: "pending"
+    priority: 2
+    depends_on: ["T1"]
+    created_at: "{{timestamp}}"
+    updated_at: "{{timestamp}}"
+    attempts: 0
+    max_attempts: 3
+    input:
+      - "{{input_file}}"
+    output:
+      - "{{output_path}}/"
+
+metadata:
+  total_tasks: 2
+  completed: 0
+  pending: 2
+  failed: 0
+  blocked: 0
 ```
+
+**Campos obligatorios:**
+- `id`: Identificador único (T1, T2, etc.)
+- `title`: Título corto
+- `description`: Descripción detallada
+- `skill`: Skill asignado (ej: backend/node-api)
+- `estado`: pending | running | done | failed | blocked
+- `priority`: 1 (alta) a 5 (baja)
+- `depends_on`: Lista de IDs de tareas previas
+- `input`: Archivos/paths de entrada (para R10 anti-hallucination)
+- `output`: Archivos/paths de salida (para R10 anti-hallucination)
+- `max_attempts`: Máximo 3 intentos
 
