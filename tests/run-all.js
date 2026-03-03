@@ -6,6 +6,7 @@ try {
   require('./phase10_recalc.test');
   require('./phase11-14_validation.test');
   require('./phase15-17_final.test');
+  require('./phase18_simulation.test');
   
   console.log("\n=== ALL TESTS PASSED ===");
   process.exit(0);
