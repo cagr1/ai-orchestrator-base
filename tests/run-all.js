@@ -7,6 +7,9 @@ try {
   require('./phase11-14_validation.test');
   require('./phase15-17_final.test');
   require('./phase18_simulation.test');
+  require('./phase_attempts.test');
+  require('./phase_memory_compaction.test');
+  require('./phase_corrective_tasks.test');
   
   console.log("\n=== ALL TESTS PASSED ===");
   process.exit(0);

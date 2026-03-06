@@ -43,7 +43,9 @@ ai-orchestrator-base/
 │   ├── testing/
 │   ├── devops/
 │   ├── security/
-│   └── architecture/
+│   ├── architecture/
+│   ├── cognitive/
+│   └── classifier/
 ├── evidence/              # Evidencias de ejecución (task_id.json)
 └── tests/                 # Tests invariantes
     ├── run-all.js
@@ -52,7 +54,10 @@ ai-orchestrator-base/
     ├── phase10_recalc.test.js
     ├── phase11-14_validation.test.js
     ├── phase15-17_final.test.js
-    └── phase18_simulation.test.js
+    ├── phase18_simulation.test.js
+    ├── phase_attempts.test.js
+    ├── phase_memory_compaction.test.js
+    └── phase_corrective_tasks.test.js
 ```
 
 ---
@@ -335,6 +340,14 @@ Editar `system/config.json`:
 ---
 
 ## 📝 Changelog
+
+### v3.1 - Improvements (2026-03-06)
+- **Mejora 1**: Tareas correctivas - Soporte para T5 → T5_fix sin mutar originales
+- **Mejora 2**: Attempts/Max Attempts - Control de reintentos con failed_permanent
+- **Mejora 3**: Memory Compaction - Auto-compacta cuando excede 20 entradas
+- **Mejora 5**: Skills cognitivas - problem-analyzer, solution-evaluator, dependency-reasoner
+- **Mejora 6**: Architecture skills - system-design, api-design, db-boundaries
+- 50+ tests invariantes
 
 ### v3.0 - Deterministic Parallel Orchestrator
 - Refactor completo a arquitectura paralela

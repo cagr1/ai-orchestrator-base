@@ -307,6 +307,122 @@ const appendToMemory = (content) => {
 };
 
 // ============================================================
+// PHASE 5B: MEMORY COMPACTION (Mejora 3)
+// ============================================================
+
+/**
+ * Load config for memory compaction settings
+ * @returns {Object} memory configuration
+ */
+const getMemoryConfig = () => {
+  const config = readJSON(CONFIG_FILE);
+  return config?.memory || { max_entries: 20, enable_compaction: true };
+};
+
+/**
+ * Count entries in memory.md (entries start with ##)
+ * @returns {number} number of entries
+ */
+const countMemoryEntries = () => {
+  const content = readFile(MEMORY_FILE);
+  if (!content) return 0;
+  
+  // Count ## markers that indicate new entries
+  const matches = content.match(/^##/gm);
+  return matches ? matches.length : 0;
+};
+
+/**
+ * Check if memory compaction is needed
+ * @returns {boolean} true if compaction should run
+ */
+const shouldCompactMemory = () => {
+  const config = getMemoryConfig();
+  
+  if (!config.enable_compaction) {
+    return false;
+  }
+  
+  const entryCount = countMemoryEntries();
+  return entryCount >= config.max_entries;
+};
+
+/**
+ * Generate a compact summary of historical entries
+ * @param {string} content - existing memory content
+ * @returns {string} compact summary
+ */
+const generateCompactSummary = (content) => {
+  const lines = content.split('\n');
+  const summaryLines = [
+    "## Historical Summary (Compacted)",
+    `- Compacted at: ${new Date().toISOString()}`,
+    "- Previous entries have been summarized for context preservation"
+  ];
+  
+  // Extract key info from existing entries (tasks completed, decisions)
+  const taskMatches = content.match(/- Tasks completed: \d+/g);
+  if (taskMatches) {
+    const lastMatch = taskMatches[taskMatches.length - 1];
+    summaryLines.push(`- Last known: ${lastMatch}`);
+  }
+  
+  // Count total entries that were compacted
+  const entryCount = (content.match(/^##/gm) || []).length;
+  summaryLines.push(`- Total historical entries: ${entryCount}`);
+  
+  return summaryLines.join('\n');
+};
+
+/**
+ * Perform memory compaction - keep last N entries + compact summary
+ */
+const performMemoryCompaction = () => {
+  const config = getMemoryConfig();
+  const content = readFile(MEMORY_FILE);
+  
+  if (!content) {
+    console.log("[COMPACTION] No memory content to compact");
+    return;
+  }
+  
+  const entries = content.split(/^##/gm).filter(e => e.trim());
+  
+  if (entries.length <= config.max_entries) {
+    console.log(`[COMPACTION] Entry count (${entries.length}) below threshold (${config.max_entries}), skipping`);
+    return;
+  }
+  
+  // Keep the first entry (header) and last N entries
+  const header = entries[0];
+  const keepCount = config.max_entries - 1; // Reserve one for summary
+  const lastEntries = entries.slice(-keepCount);
+  
+  // Generate compact summary of historical entries
+  const historicalContent = entries.slice(1, -keepCount).join('\n##');
+  const summary = generateCompactSummary("##" + historicalContent);
+  
+  // Rebuild memory file
+  const compacted = header + '\n##' + lastEntries.join('\n##');
+  const newContent = compacted + '\n\n' + summary + '\n';
+  
+  writeFile(MEMORY_FILE, newContent);
+  console.log(`[COMPACTION] Compacted ${entries.length - config.max_entries} entries, kept ${config.max_entries}`);
+};
+
+/**
+ * Append to memory with automatic compaction
+ * @param {string} content - content to append
+ */
+const appendToMemoryWithCompaction = (content) => {
+  appendToMemory(content);
+  
+  if (shouldCompactMemory()) {
+    performMemoryCompaction();
+  }
+};
+
+// ============================================================
 // PHASE 6: COOLDOWN (LLM Fatigue Protection)
 // ============================================================
 
@@ -507,6 +623,284 @@ const validatePlannerAllowed = (state, tasksExists) => {
 };
 
 // ============================================================
+// PHASE 18: ATTEMPTS/MAX_ATTEMPTS (Mejora 2)
+// ============================================================
+
+/**
+ * Increment attempts counter for a task when it fails
+ * @param {Object} tasks - tasks object
+ * @param {string} taskId - task id to increment attempts
+ * @returns {Object|null} updated task or null if not found
+ */
+const incrementTaskAttempts = (tasks, taskId) => {
+  const task = getTaskById(tasks, taskId);
+  if (!task) return null;
+  
+  // Initialize attempts if not present
+  if (task.attempts === undefined) {
+    task.attempts = 0;
+  }
+  // Initialize max_attempts if not present (default to 3)
+  if (task.max_attempts === undefined) {
+    task.max_attempts = 3;
+  }
+  
+  task.attempts += 1;
+  task.updated_at = new Date().toISOString();
+  updateTaskMetadata(tasks);
+  
+  return task;
+};
+
+/**
+ * Check if a task has exhausted all attempts
+ * @param {Object} task - task object
+ * @returns {boolean} true if attempts >= max_attempts
+ */
+const isTaskExhausted = (task) => {
+  if (!task) return false;
+  
+  const attempts = task.attempts || 0;
+  const maxAttempts = task.max_attempts || 3;
+  
+  return attempts >= maxAttempts;
+};
+
+/**
+ * Mark a task as permanently failed when attempts are exhausted
+ * @param {Object} tasks - tasks object
+ * @param {string} taskId - task id to mark as failed_permanent
+ * @returns {Object|null} updated task or null if not found
+ */
+const markTaskFailedPermanent = (tasks, taskId) => {
+  const task = getTaskById(tasks, taskId);
+  if (!task) return null;
+  
+  task.estado = "failed_permanent";
+  task.updated_at = new Date().toISOString();
+  updateTaskMetadata(tasks);
+  
+  return task;
+};
+
+/**
+ * Handle dependent tasks when a task fails permanently
+ * Blocks all tasks that depend on the failed task
+ * @param {Object} tasks - tasks object
+ * @param {string} failedTaskId - id of the permanently failed task
+ * @returns {Array} list of dependent tasks that were blocked
+ */
+const handleDependentTasksOnFailure = (tasks, failedTaskId) => {
+  const blockedTasks = [];
+  
+  tasks.tasks.forEach(task => {
+    // Skip if already done or failed_permanent
+    if (task.estado === "done" || task.estado === "failed_permanent") {
+      return;
+    }
+    
+    // Check if this task depends on the failed task
+    if (task.depends_on && task.depends_on.includes(failedTaskId)) {
+      task.estado = "blocked";
+      task.updated_at = new Date().toISOString();
+      blockedTasks.push(task.id);
+    }
+  });
+  
+  updateTaskMetadata(tasks);
+  return blockedTasks;
+};
+
+/**
+ * Process a task failure - increments attempts and handles exhaustion
+ * @param {Object} tasks - tasks object
+ * @param {string} taskId - task id that failed
+ * @param {Object} state - state object
+ * @returns {Object} result with action taken
+ */
+const processTaskFailure = (tasks, taskId, state) => {
+  const task = getTaskById(tasks, taskId);
+  if (!task) {
+    return { action: "error", message: "Task not found" };
+  }
+  
+  // Increment attempts
+  incrementTaskAttempts(tasks, taskId);
+  
+  // Check if exhausted
+  if (isTaskExhausted(task)) {
+    // Mark as permanently failed
+    markTaskFailedPermanent(tasks, taskId);
+    
+    // Handle dependents
+    const blocked = handleDependentTasksOnFailure(tasks, taskId);
+    
+    // Update state
+    state.execution_control.consecutive_failures++;
+    
+    return {
+      action: "failed_permanent",
+      message: `Task ${taskId} failed after ${task.attempts} attempts`,
+      blocked_dependents: blocked
+    };
+  } else {
+    // Still has attempts left - can retry
+    state.execution_control.consecutive_failures++;
+    
+    return {
+      action: "retry_allowed",
+      message: `Task ${taskId} failed, ${task.max_attempts - task.attempts} attempts remaining`,
+      attempts: task.attempts,
+      max_attempts: task.max_attempts
+    };
+  }
+};
+
+// ============================================================
+// PHASE 19: CORRECTIVE TASKS (Mejora 1)
+// ============================================================
+
+/**
+ * Generate a corrective task ID from a failed task
+ * @param {string} taskId - original task ID
+ * @returns {string} corrective task ID (e.g., T5 -> T5_fix)
+ */
+const generateCorrectiveTaskId = (taskId) => {
+  return `${taskId}_fix`;
+};
+
+/**
+ * Check if a task ID is a corrective task
+ * @param {string} taskId - task ID to check
+ * @returns {boolean} true if task is a corrective task
+ */
+const isCorrectiveTask = (taskId) => {
+  return taskId.endsWith('_fix');
+};
+
+/**
+ * Get the original task ID from a corrective task
+ * @param {string} correctiveTaskId - corrective task ID (e.g., T5_fix)
+ * @returns {string|null} original task ID or null if not valid
+ */
+const getOriginalTaskId = (correctiveTaskId) => {
+  if (!isCorrectiveTask(correctiveTaskId)) {
+    return null;
+  }
+  return correctiveTaskId.replace('_fix', '');
+};
+
+/**
+ * Create a corrective task based on a failed task
+ * The original task remains unchanged (immutable)
+ * @param {Object} tasks - tasks object
+ * @param {string} failedTaskId - ID of the failed task
+ * @param {string} fixDescription - Description of the fix needed
+ * @returns {Object|null} created corrective task or null if failed task not found
+ */
+const createCorrectiveTask = (tasks, failedTaskId, fixDescription) => {
+  const originalTask = getTaskById(tasks, failedTaskId);
+  if (!originalTask) {
+    return null;
+  }
+  
+  const correctiveId = generateCorrectiveTaskId(failedTaskId);
+  
+  // Check if corrective task already exists
+  const existing = getTaskById(tasks, correctiveId);
+  if (existing) {
+    return existing;
+  }
+  
+  // Create corrective task based on original
+  const correctiveTask = {
+    id: correctiveId,
+    description: fixDescription || `Corrective task for ${failedTaskId}: Fix issues from failed execution`,
+    estado: "pending",
+    priority: originalTask.priority,
+    depends_on: [...originalTask.depends_on], // Keep same dependencies
+    attempts: 0,
+    max_attempts: 1, // Usually only 1 attempt for corrective tasks
+    input: [...(originalTask.input || [])],
+    output: [...(originalTask.output || [])],
+    skill: originalTask.skill,
+    original_task: failedTaskId, // Reference to original task
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  
+  tasks.tasks.push(correctiveTask);
+  updateTaskMetadata(tasks);
+  
+  return correctiveTask;
+};
+
+/**
+ * Link dependent tasks to use the corrective task instead of the failed one
+ * @param {Object} tasks - tasks object
+ * @param {string} failedTaskId - ID of the failed task
+ * @param {string} correctiveTaskId - ID of the corrective task
+ * @returns {Array} list of dependent tasks that were updated
+ */
+const linkDependentToCorrective = (tasks, failedTaskId, correctiveTaskId) => {
+  const updatedDependents = [];
+  
+  tasks.tasks.forEach(task => {
+    // Skip if already done
+    if (task.estado === "done") {
+      return;
+    }
+    
+    // Check if this task depends on the failed task
+    if (task.depends_on && task.depends_on.includes(failedTaskId)) {
+      // Add corrective task to dependencies, keep original as reference
+      if (!task.depends_on.includes(correctiveTaskId)) {
+        task.depends_on.push(correctiveTaskId);
+        task.corrective_link = failedTaskId; // Track the original dependency
+        task.updated_at = new Date().toISOString();
+        updatedDependents.push(task.id);
+      }
+    }
+  });
+  
+  updateTaskMetadata(tasks);
+  return updatedDependents;
+};
+
+/**
+ * Create a corrective task and optionally link dependents
+ * @param {Object} tasks - tasks object
+ * @param {string} failedTaskId - ID of the failed task
+ * @param {Object} options - options object
+ * @param {string} options.fixDescription - Description of the fix
+ * @param {boolean} options.linkDependents - Whether to link dependents to corrective task
+ * @returns {Object} result with created task and linked dependents
+ */
+const createAndLinkCorrectiveTask = (tasks, failedTaskId, options = {}) => {
+  const { fixDescription, linkDependents = true } = options;
+  
+  // Create the corrective task
+  const correctiveTask = createCorrectiveTask(tasks, failedTaskId, fixDescription);
+  
+  if (!correctiveTask) {
+    return { action: "error", message: "Failed task not found" };
+  }
+  
+  // Link dependents if requested
+  let linkedDependents = [];
+  if (linkDependents) {
+    linkedDependents = linkDependentToCorrective(tasks, failedTaskId, correctiveTask.id);
+  }
+  
+  return {
+    action: "corrective_created",
+    message: `Corrective task ${correctiveTask.id} created for ${failedTaskId}`,
+    corrective_task: correctiveTask,
+    linked_dependents: linkedDependents
+  };
+};
+
+// ============================================================
 // PHASE 10: RECALCULATION RULE
 // ============================================================
 
@@ -689,5 +1083,24 @@ module.exports = {
   // Phase 14
   validateEvidenceAgainstTask,
   // Phase 17
-  validatePlannerAllowed
+  validatePlannerAllowed,
+  // Phase 18 - Attempts/Max Attempts (Mejora 2)
+  incrementTaskAttempts,
+  isTaskExhausted,
+  markTaskFailedPermanent,
+  handleDependentTasksOnFailure,
+  processTaskFailure,
+  // Phase 5B - Memory Compaction (Mejora 3)
+  getMemoryConfig,
+  countMemoryEntries,
+  shouldCompactMemory,
+  performMemoryCompaction,
+  appendToMemoryWithCompaction,
+  // Phase 19 - Corrective Tasks (Mejora 1)
+  generateCorrectiveTaskId,
+  isCorrectiveTask,
+  getOriginalTaskId,
+  createCorrectiveTask,
+  linkDependentToCorrective,
+  createAndLinkCorrectiveTask
 };

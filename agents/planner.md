@@ -69,7 +69,11 @@ FASE 4 depende de: FASE 3
    - Si hay triggers professional  usar `project_tiers.professional`
    - Por defecto  usar `project_tiers.basic`
 4. **Seleccionar skills** - Usar `skills_enabled[tier]` del config
-5. **Identificar tipo** - landing, api, database, fullstack
+5. **Agregar skills cognitivas** - Si el problema es complejo, agregar `skills_enabled.cognitive`
+   - Usar cognitive-problem-analyzer para problemas complejos
+   - Usar cognitive-solution-evaluator para evaluar múltiples opciones
+   - Usar cognitive-dependency-reasoner para optimizar dependencias
+6. **Identificar tipo** - landing, api, database, fullstack
 6. **Obtener run_id** e iteration desde [`system/state.json`](system/state.json)
 
 **Ejemplos de tier detection:**

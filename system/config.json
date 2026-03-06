@@ -6,6 +6,11 @@
   "allowed_stacks": ["dotnet", "node", "react", "vue", "sqlserver", "postgres", "laravel"],
   
   "skills_enabled": {
+    "cognitive": [
+      "cognitive-problem-analyzer",
+      "cognitive-solution-evaluator",
+      "cognitive-dependency-reasoner"
+    ],
     "basic": [
       "frontend-react-hooks",
       "frontend-vue-composition",
@@ -64,6 +69,9 @@
       "testing-backend-test",
       "security-api-security",
       "architecture-global-architect",
+      "architecture-system-design",
+      "architecture-api-design",
+      "architecture-db-boundaries",
       "ux"
     ]
   },
@@ -187,5 +195,10 @@
     "2": "Standard - Interacciones medianas, integraciones API, diseño responsive",
     "3": "Advanced - Animaciones complejas, estados globales, optimización de queries",
     "4": "Expert - Arquitectura escalable, micro-interacciones premium, high-performance"
+  },
+  
+  "memory": {
+    "max_entries": 20,
+    "enable_compaction": true
   }
 }
