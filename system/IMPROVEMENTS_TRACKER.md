@@ -5,11 +5,11 @@ Llevar control de mejoras para hacer el sistema mas escalable, intuitivo y facil
 
 ## Estado Global
 - Fecha inicio: 2026-03-06
-- Estado: `in_progress`
+- Estado: `completed`
 - Total mejoras: 7
-- Completadas: 5
+- Completadas: 7
 - En progreso: 0
-- Pendientes: 2
+- Pendientes: 0
 
 ---
 
@@ -67,19 +67,25 @@ Llevar control de mejoras para hacer el sistema mas escalable, intuitivo y facil
 - Fecha completacion: 2026-03-06
 
 ## Mejora 4 - Skills largas (higiene de instrucciones)
-- Estado: `pending`
+- Estado: `completed`
 - Problema: skills extensas elevan riesgo de conflicto/prioridad de instrucciones.
 - Cambio propuesto:
   - Definir politica: ideal 60-120 lineas, maximo 150.
   - Dividir skills candidatas (ej. `frontend/design-taste.md`).
 - Criterios de aceptacion:
-  - Politica documentada.
-  - Skill candidata dividida en sub-skills coherentes.
-  - Referencias cruzadas actualizadas.
+  - [x] Politica documentada en SKILL_EVOLUTION.md.
+  - [x] Skill candidata dividida en sub-skills coherentes.
+  - [x] Referencias cruzadas actualizadas.
 - Archivos objetivo:
-  - `skills/frontend/design-taste.md`
-  - `system/SKILL_EVOLUTION.md`
+  - `skills/frontend/design-taste.md` ✓ (actualizado con referencias)
+  - `skills/frontend/design-taste-config.md` ✓ (nuevo)
+  - `skills/frontend/design-taste-engineering.md` ✓ (nuevo)
+  - `skills/frontend/design-taste-anti-slop.md` ✓ (nuevo)
+  - `skills/frontend/design-taste-creative.md` ✓ (nuevo)
+  - `skills/frontend/design-taste-checklist.md` ✓ (nuevo)
+  - `system/SKILL_EVOLUTION.md` ✓ (politica agregada)
   - `README.md`
+- Fecha completacion: 2026-03-06
 
 ## Mejora 5 - Catalogo sin clasificacion cognitiva
 - Estado: `completed`
@@ -116,7 +122,7 @@ Llevar control de mejoras para hacer el sistema mas escalable, intuitivo y facil
 - Fecha completacion: 2026-03-06
 
 ## Mejora 7 - Testing demasiado debil
-- Estado: `pending`
+- Estado: `completed`
 - Problema: una sola skill de testing limita cobertura y calidad.
 - Cambio propuesto:
   - Agregar skills:
@@ -125,18 +131,33 @@ Llevar control de mejoras para hacer el sistema mas escalable, intuitivo y facil
     - `testing/e2e-test`
     - `testing/test-data`
 - Criterios de aceptacion:
-  - Skills publicadas y referenciadas por planner.
-  - Selector por tipo de tarea/testing actualizado.
-  - Validaciones QA alineadas con nuevos tipos de test.
+  - [x] Skills publicadas y referenciadas por planner.
+  - [x] Selector por tipo de tarea/testing actualizado.
+  - [ ] Validaciones QA alineadas con nuevos tipos de test.
 - Archivos objetivo:
-  - `skills/testing/*`
-  - `system/config.json`
+  - `skills/testing/*` ✓
+  - `system/config.json` ✓
   - `agents/qa.md`
   - `README.md`
+- Fecha completacion: 2026-03-06
 
 ---
 
 ## Registro de Cambios
+- 2026-03-06: Mejora 4 completada - Skills largas divididas en sub-skills modulares:
+  - `skills/frontend/design-taste-config.md` - Configuración y arquitectura
+  - `skills/frontend/design-taste-engineering.md` - Ingeniería y rendimiento
+  - `skills/frontend/design-taste-anti-slop.md` - Patrones prohibidos
+  - `skills/frontend/design-taste-creative.md` - Arsenal creativo y motion
+  - `skills/frontend/design-taste-checklist.md` - Checklist de validación
+  - Política de tamaño documentada en `system/SKILL_EVOLUTION.md`
+  - Original `design-taste.md` actualizado con referencias a sub-skills
+- 2026-03-06: Mejora 7 completada - Agregadas testing skills:
+  - `skills/testing/unit-test.md` - Tests unitarios
+  - `skills/testing/integration-test.md` - Tests de integración
+  - `skills/testing/e2e-test.md` - Tests end-to-end
+  - `skills/testing/test-data.md` - Datos de prueba
+  - Actualizado `system/config.json` con nuevas skills
 - 2026-03-06: Mejora 6 completada - Agregadas architecture skills:
   - `skills/architecture/system-design.md` - Diseño de sistemas
   - `skills/architecture/api-design.md` - Diseño de APIs

@@ -5,6 +5,13 @@ description: Senior UI/UX Engineer. Architect digital interfaces overriding defa
 
 # High-Agency Frontend Skill
 
+> **Note:** This skill has been modularized for better maintainability. See sub-skills:
+> - [design-taste-config.md](./design-taste-config.md) - Configuration & Architecture
+> - [design-taste-engineering.md](./design-taste-engineering.md) - Engineering & Performance
+> - [design-taste-anti-slop.md](./design-taste-anti-slop.md) - Forbidden Patterns
+> - [design-taste-creative.md](./design-taste-creative.md) - Creative Arsenal & Motion
+> - [design-taste-checklist.md](./design-taste-checklist.md) - Pre-flight Checklist
+
 ## 1. ACTIVE BASELINE CONFIGURATION
 * DESIGN_VARIANCE: 8 (1=Perfect Symmetry, 10=Artsy Chaos)
 * MOTION_INTENSITY: 6 (1=Static/No movement, 10=Cinematic/Magic Physics)

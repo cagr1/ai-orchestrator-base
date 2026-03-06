@@ -165,7 +165,13 @@
       "premium": ["frontend-design-taste", "frontend-animations-expert", "backend-node-api", "database-postgresql-expert", "security-api-security"]
     },
     "testing": {
-      "all": ["testing-backend-test"]
+      "all": [
+        "testing-backend-test",
+        "testing-unit-test",
+        "testing-integration-test",
+        "testing-e2e-test",
+        "testing-test-data"
+      ]
     },
     "devops": {
       "all": ["devops-docker", "devops-ci-cd", "devops-deployment"]

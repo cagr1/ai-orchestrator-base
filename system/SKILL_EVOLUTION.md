@@ -25,3 +25,35 @@ Capture repeatable engineering decisions from project execution and promote them
 - Executor: propose concrete rule changes.
 - QA: verify the new rule is testable.
 - Reviewer: approve promotion and request changelog entry.
+
+---
+
+## Skill Hygiene Policy (Size Limits)
+
+To maintain readability and reduce instruction conflict risk, skills should follow these size guidelines:
+
+| Size Category | Lines | Description |
+|---------------|-------|-------------|
+| **Ideal** | 60-120 | Optimal for focused execution |
+| **Maximum** | 150 | Hard limit before splitting required |
+| **Warning** | 120+ | Consider splitting |
+
+### When to Split a Skill
+- When the skill exceeds 150 lines
+- When the skill covers multiple distinct concerns (e.g., config + creative + engineering)
+- When different execution contexts need only subsets of the skill
+
+### Splitting Strategy
+1. Identify logical sections with distinct purposes
+2. Create focused sub-skills (60-120 lines each)
+3. Update original skill to reference sub-skills
+4. Maintain backward compatibility by keeping original as entry point
+
+### Example: design-taste.md
+- Original: 226 lines (exceeded max)
+- Split into:
+  - `design-taste-config.md` (~45 lines) - Configuration & Architecture
+  - `design-taste-engineering.md` (~65 lines) - Engineering & Performance
+  - `design-taste-anti-slop.md` (~35 lines) - Forbidden Patterns
+  - `design-taste-creative.md` (~100 lines) - Creative Arsenal & Motion
+  - `design-taste-checklist.md` (~12 lines) - Pre-flight Checklist
