@@ -227,6 +227,25 @@ npm test
 
 ---
 
+## ✅ Estado Actual y Limitaciones
+
+**Fortalezas:**
+- Orquestación determinística y auditable (events.log + status.md + runs history).
+- Evidencia automática y validación estricta (R10 + verify).
+- Concurrencia segura con lock optimista en `tasks.yaml`.
+- Contexto barato (`context.md`) para reducir costos de lectura.
+
+**Limitaciones actuales:**
+- No ejecuta tareas por sí solo: requiere LLM/Planner o humano para escribir `plan.md` y `tasks.yaml`.
+- La evidencia automática depende de `git diff --name-only` (si no hay git o no hay diff, requiere archivos explícitos).
+- Proveedores y costo son estado local (no conectan con APIs todavía).
+
+**Listo para pruebas fuertes:**
+- Sí, a nivel de orquestación, validaciones y flujos SDD, con tests pasando.
+- Recomendado: pruebas de carga con múltiples editores en `tasks.yaml` y repos grandes para validar locks y performance.
+
+---
+
 ## 🔄 Flujo de Trabajo v3.0
 
 ```mermaid
@@ -401,6 +420,7 @@ El runner lee `system/config.json`. Soporta un bloque `limits` (opcional) para a
 ## 📚 Documentación Adicional
 
 - [`USAGE.md`](USAGE.md) - Guía completa de uso
+- [`TECHNICAL.md`](TECHNICAL.md) - Documentación técnica y arquitectura
 - [`plans/v3-deterministic-parallel-orchestrator-plan.md`](plans/v3-deterministic-parallel-orchestrator-plan.md) - Plan de implementación v3.0
 - [`agents/planner.md`](agents/planner.md) - Definición del Planner
 - [`agents/checkpoint.md`](agents/checkpoint.md) - Definición del Checkpoint Agent

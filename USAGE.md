@@ -426,6 +426,14 @@ metadata:
 
 ---
 
+## ✅ Notas de Pruebas Fuertes
+
+- Usa `node runner.js verify` al final de cada ronda para validar evidencias.
+- En repos grandes, prioriza `context.md` y evita relecturas completas.
+- Si hay varios editores, el lock optimista evitará sobrescribir cambios de `tasks.yaml`.
+
+---
+
 ### system/config.json
 
 El runner lee `system/config.json` en cada `run/resume`. Puedes definir `limits` para ajustar topes de ejecucion y `evidence` para enforcement (el repo puede incluir otros campos adicionales para selector de skills).
@@ -585,6 +593,7 @@ node runner.js status
 ## 📚 Documentación Relacionada
 
 - [`README.md`](README.md) - Visión general del sistema
+- [`TECHNICAL.md`](TECHNICAL.md) - Documentación técnica y arquitectura
 - [`plans/v3-deterministic-parallel-orchestrator-plan.md`](plans/v3-deterministic-parallel-orchestrator-plan.md) - Plan de implementación
 - [`agents/planner.md`](agents/planner.md) - Definición del Planner
 - [`agents/checkpoint.md`](agents/checkpoint.md) - Definición del Checkpoint Agent
