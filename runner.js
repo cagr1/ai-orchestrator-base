@@ -25,6 +25,10 @@ const PLAN_REQUEST_FILE = path.join(SYSTEM_DIR, 'plan_request.md');
 const EVENTS_FILE = path.join(SYSTEM_DIR, 'events.log');
 const STATUS_FILE = path.join(SYSTEM_DIR, 'status.md');
 const RUNS_DIR = path.join(SYSTEM_DIR, 'runs');
+const COST_FILE = path.join(SYSTEM_DIR, 'cost.json');
+const PROVIDER_FILE = path.join(SYSTEM_DIR, 'provider.json');
+const SKILLS_INDEX_FILE = path.join(SYSTEM_DIR, 'skills_index.json');
+const SPLITS_DIR = path.join(SYSTEM_DIR, 'splits');
 
 // ============================================================
 // FILE OPERATIONS
@@ -121,6 +125,114 @@ const applyRetentionPolicies = () => {
       }
     }
   }
+};
+
+// ============================================================
+// SKILLS REGISTRY
+// ============================================================
+
+const parseFrontmatterName = (content) => {
+  if (!content.startsWith('---')) return null;
+  const end = content.indexOf('---', 3);
+  if (end === -1) return null;
+  const front = content.slice(3, end);
+  const match = front.match(/name:\s*(.+)/i);
+  return match ? match[1].trim() : null;
+};
+
+const collectSkills = (dir, baseDir, items = []) => {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectSkills(full, baseDir, items);
+      continue;
+    }
+    if (!entry.name.endsWith('.md')) continue;
+    const rel = path.relative(baseDir, full).replace(/\\/g, '/');
+    const content = readFile(full) || '';
+    const name = parseFrontmatterName(content) || entry.name.replace(/\.md$/, '');
+    const category = rel.split('/')[0];
+    items.push({ name, path: rel, category });
+  }
+  return items;
+};
+
+const buildSkillsIndex = () => {
+  const skillsDir = path.join(ROOT_DIR, 'skills');
+  if (!fs.existsSync(skillsDir)) return [];
+  const items = collectSkills(skillsDir, skillsDir);
+  writeJSON(SKILLS_INDEX_FILE, { generated_at: nowIso(), items });
+  return items;
+};
+
+const loadSkillsIndex = () => {
+  const existing = readJSON(SKILLS_INDEX_FILE);
+  if (existing?.items?.length) return existing.items;
+  return buildSkillsIndex();
+};
+
+// ============================================================
+// COST + PROVIDER STATE
+// ============================================================
+
+const loadCostState = () => {
+  const existing = readJSON(COST_FILE);
+  if (existing) return existing;
+  const cfg = loadRuntimeConfig();
+  const budget = cfg?.cost_budget?.max_usd || 0;
+  const state = { budget_usd: budget, spent_usd: 0 };
+  writeJSON(COST_FILE, state);
+  return state;
+};
+
+const updateCostState = (updates) => {
+  const state = loadCostState();
+  const next = { ...state, ...updates };
+  writeJSON(COST_FILE, next);
+  return next;
+};
+
+const loadProviderState = () => {
+  const existing = readJSON(PROVIDER_FILE);
+  if (existing) return existing;
+  const cfg = loadRuntimeConfig();
+  const providers = cfg?.providers || {};
+  const active = cfg?.active_provider || Object.keys(providers)[0] || null;
+  const state = { active_provider: active, providers };
+  writeJSON(PROVIDER_FILE, state);
+  return state;
+};
+
+const updateProviderState = (updates) => {
+  const state = loadProviderState();
+  const next = { ...state, ...updates };
+  writeJSON(PROVIDER_FILE, next);
+  return next;
+};
+
+const runReviewHooks = () => {
+  const config = loadRuntimeConfig();
+  const hooks = config?.review_hooks?.commands || [];
+  const autoRun = config?.review_hooks?.auto_run === true;
+
+  if (hooks.length === 0) {
+    console.log('[REVIEW] No review hooks configured');
+    return;
+  }
+
+  console.log('[REVIEW] Hooks:');
+  hooks.forEach(cmd => console.log(`- ${cmd}`));
+
+  if (!autoRun) {
+    console.log('[REVIEW] auto_run is disabled. Enable review_hooks.auto_run to execute.');
+    return;
+  }
+
+  hooks.forEach(cmd => {
+    console.log(`[REVIEW] Running: ${cmd}`);
+    execSync(cmd, { stdio: 'inherit' });
+  });
 };
 
 // ============================================================
@@ -273,6 +385,8 @@ const writeStatusDashboard = (state, tasksDoc) => {
   const spec = countSpecCoverage(tasks);
   const risks = collectRiskFlags(tasks);
   const pending = getTopPendingTasks(tasksDoc, 8);
+  const cost = fileExists(COST_FILE) ? readJSON(COST_FILE) : null;
+  const provider = fileExists(PROVIDER_FILE) ? readJSON(PROVIDER_FILE) : null;
 
   const lines = [
     '# Status Dashboard',
@@ -296,6 +410,13 @@ const writeStatusDashboard = (state, tasksDoc) => {
     '',
     '## Spec Coverage',
     `- with_spec: ${spec.withSpec}/${spec.total} (${spec.pct}%)`,
+    '',
+    '## Cost',
+    `- budget_usd: ${cost?.budget_usd ?? 0}`,
+    `- spent_usd: ${cost?.spent_usd ?? 0}`,
+    '',
+    '## Provider',
+    `- active_provider: ${provider?.active_provider || '-'}`,
     '',
     '## Top Pending Tasks',
     ...(pending.length ? pending.map(p => `- ${p}`) : ['- (none)']),
@@ -1514,6 +1635,58 @@ const markTaskPending = (tasksDoc, taskId) => {
   return task;
 };
 
+const suggestTaskSplit = (tasksDoc, taskId) => {
+  const task = getTaskById(tasksDoc, taskId);
+  if (!task) return null;
+
+  const validation = validateTaskSize(task);
+  if (validation.valid) {
+    return { ok: false, reason: 'task_is_within_limits' };
+  }
+
+  const existingIds = tasksDoc.tasks.map(t => t.id);
+  const maxId = existingIds.reduce((max, id) => {
+    const match = /^T(\d+)/.exec(id || '');
+    const num = match ? parseInt(match[1], 10) : 0;
+    return Math.max(max, num);
+  }, 0);
+
+  const outputs = Array.isArray(task.output) ? task.output : [];
+  const midpoint = Math.ceil(outputs.length / 2) || 1;
+  const outputsA = outputs.slice(0, midpoint);
+  const outputsB = outputs.slice(midpoint);
+
+  const t1 = {
+    id: `T${maxId + 1}`,
+    title: `${task.title} (part 1)`,
+    description: task.description,
+    skill: task.skill,
+    estado: 'pending',
+    priority: task.priority,
+    depends_on: Array.isArray(task.depends_on) ? [...task.depends_on] : [],
+    attempts: 0,
+    max_attempts: task.max_attempts || 2,
+    input: Array.isArray(task.input) ? [...task.input] : [],
+    output: outputsA
+  };
+
+  const t2 = {
+    id: `T${maxId + 2}`,
+    title: `${task.title} (part 2)`,
+    description: task.description,
+    skill: task.skill,
+    estado: 'pending',
+    priority: task.priority,
+    depends_on: [t1.id],
+    attempts: 0,
+    max_attempts: task.max_attempts || 2,
+    input: Array.isArray(task.input) ? [...task.input] : [],
+    output: outputsB.length ? outputsB : outputsA
+  };
+
+  return { ok: true, tasks: [t1, t2], violations: validation.errors };
+};
+
 // ============================================================
 // CLI COMMANDS
 // ============================================================
@@ -1773,9 +1946,10 @@ const main = async () => {
   }
   
   if (command === 'review') {
-    console.log('[REVIEW] Manual review mode');
+    console.log('[REVIEW] Review mode');
     console.log('[REVIEW] Use this when status = needs_review');
-    console.log('[INFO] Implementation pending');
+    runReviewHooks();
+    appendEvent('review', { run_id: loadState()?.run_id || '-' });
     return;
   }
 
@@ -1836,6 +2010,129 @@ const main = async () => {
     }
     console.log('[VALIDATE] Planning checks passed');
     appendEvent('validate', { run_id: state.run_id });
+    return;
+  }
+
+  if (command === 'skills') {
+    const sub = args[1] || '';
+    if (sub === 'rebuild' || sub === '--rebuild') {
+      const items = buildSkillsIndex();
+      console.log(`[SKILLS] Index rebuilt (${items.length} items)`);
+      return;
+    }
+    const items = loadSkillsIndex();
+    if (sub === 'search') {
+      const term = (args.slice(2).join(' ') || '').toLowerCase();
+      const results = items.filter(i =>
+        i.name.toLowerCase().includes(term) || i.path.toLowerCase().includes(term)
+      );
+      results.forEach(r => console.log(`- ${r.name} (${r.path})`));
+      console.log(`[SKILLS] ${results.length} match(es)`);
+      return;
+    }
+    const counts = items.reduce((acc, item) => {
+      acc[item.category] = (acc[item.category] || 0) + 1;
+      return acc;
+    }, {});
+    Object.keys(counts).sort().forEach(cat => {
+      console.log(`- ${cat}: ${counts[cat]}`);
+    });
+    console.log(`[SKILLS] Total: ${items.length}`);
+    return;
+  }
+
+  if (command === 'split') {
+    const state = loadState();
+    if (!state) {
+      console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
+      process.exit(1);
+    }
+    const taskId = args[1];
+    if (!taskId) {
+      console.error('[ERROR] Missing task id. Usage: node runner.js split T1');
+      process.exit(1);
+    }
+    const tasksDoc = normalizeTasksDoc(loadTasks());
+    const suggestion = suggestTaskSplit(tasksDoc, taskId);
+    if (!suggestion) {
+      console.error(`[ERROR] Task not found: ${taskId}`);
+      process.exit(1);
+    }
+    if (!suggestion.ok) {
+      console.log(`[SPLIT] No split needed: ${suggestion.reason}`);
+      return;
+    }
+    ensureDir(SPLITS_DIR);
+    const outFile = path.join(SPLITS_DIR, `${taskId}.yaml`);
+    const payload = {
+      original_task: taskId,
+      violations: suggestion.violations,
+      suggested_tasks: suggestion.tasks
+    };
+    writeYAML(outFile, payload);
+    console.log(`[SPLIT] Suggestion written to ${outFile}`);
+    appendEvent('split', { task: taskId });
+    return;
+  }
+
+  if (command === 'provider') {
+    const state = loadProviderState();
+    const sub = args[1] || '';
+    if (sub === 'list') {
+      const providers = state.providers || {};
+      Object.keys(providers).forEach(name => {
+        const active = name === state.active_provider ? ' (active)' : '';
+        console.log(`- ${name}${active}`);
+      });
+      return;
+    }
+    if (sub === 'use') {
+      const name = args[2];
+      if (!name) {
+        console.error('[ERROR] Missing provider name. Usage: node runner.js provider use <name>');
+        process.exit(1);
+      }
+      if (!state.providers || !state.providers[name]) {
+        console.error(`[ERROR] Unknown provider: ${name}`);
+        process.exit(1);
+      }
+      updateProviderState({ active_provider: name });
+      console.log(`[PROVIDER] Active provider set to ${name}`);
+      appendEvent('provider', { active: name });
+      return;
+    }
+    console.log('[PROVIDER] Usage: node runner.js provider list | use <name>');
+    return;
+  }
+
+  if (command === 'cost') {
+    const sub = args[1] || '';
+    if (sub === 'set') {
+      const value = parseFloat(args[2]);
+      if (Number.isNaN(value)) {
+        console.error('[ERROR] Missing/invalid amount. Usage: node runner.js cost set 50');
+        process.exit(1);
+      }
+      updateCostState({ budget_usd: value });
+      console.log(`[COST] Budget set to ${value} USD`);
+      appendEvent('cost_budget', { budget: value });
+      return;
+    }
+    if (sub === 'add') {
+      const value = parseFloat(args[2]);
+      if (Number.isNaN(value)) {
+        console.error('[ERROR] Missing/invalid amount. Usage: node runner.js cost add 1.25');
+        process.exit(1);
+      }
+      const state = loadCostState();
+      const next = (state.spent_usd || 0) + value;
+      updateCostState({ spent_usd: next });
+      console.log(`[COST] Spent updated to ${next} USD`);
+      appendEvent('cost_spent', { spent: next });
+      return;
+    }
+    const state = loadCostState();
+    console.log(`[COST] budget_usd=${state.budget_usd} spent_usd=${state.spent_usd}`);
     return;
   }
 
@@ -2050,6 +2347,10 @@ const main = async () => {
   console.log('  review         Manual review mode');
   console.log('  plan "prompt"  Create planner request (context + goal)');
   console.log('  validate       Validate tasks.yaml against config');
+  console.log('  skills [search <term>|rebuild]  Skills registry');
+  console.log('  split T1        Suggest task split (writes system/splits/T1.yaml)');
+  console.log('  provider list|use <name>  Provider selection');
+  console.log('  cost [set|add] <amount>  Track budget/spend');
   console.log('  done T1 [files...]   Mark task done (+ auto evidence)');
   console.log('  fail T1 "reason"     Mark task failed');
   console.log('  retry T1             Move task back to pending');

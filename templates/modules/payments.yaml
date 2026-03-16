@@ -1,0 +1,21 @@
+version: "1.0"
+module: "payments"
+tasks:
+  - id: "T1"
+    title: "Definir flujo de pagos"
+    description: "Estados, reintentos, webhooks"
+    skill: "architecture/api-design"
+    input: []
+    output: ["docs/payments-flow.md"]
+  - id: "T2"
+    title: "Integracion backend"
+    description: "Endpoints y validaciones"
+    skill: "backend/node-api"
+    input: ["docs/payments-flow.md"]
+    output: ["src/api/payments/"]
+  - id: "T3"
+    title: "UX de pagos"
+    description: "UI y mensajes de estado"
+    skill: "frontend/ux-accessibility"
+    input: ["docs/payments-flow.md"]
+    output: ["src/ui/Payments.tsx"]

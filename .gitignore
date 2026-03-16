@@ -7,4 +7,8 @@ system/context.md
 system/status.md
 system/events.log
 system/plan_request.md
+system/skills_index.json
+system/provider.json
+system/cost.json
+system/splits/
 _smoke_test_project/

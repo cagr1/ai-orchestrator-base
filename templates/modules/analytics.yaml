@@ -1,0 +1,21 @@
+version: "1.0"
+module: "analytics"
+tasks:
+  - id: "T1"
+    title: "Definir metricas"
+    description: "KPIs y fuentes"
+    skill: "architecture/system-design"
+    input: []
+    output: ["docs/metrics.md"]
+  - id: "T2"
+    title: "Modelado de datos"
+    description: "Esquema y agregaciones"
+    skill: "database/postgres-schema"
+    input: ["docs/metrics.md"]
+    output: ["docs/analytics-schema.md"]
+  - id: "T3"
+    title: "Dashboard UI"
+    description: "Visualizaciones basicas"
+    skill: "frontend/react-hooks"
+    input: ["docs/metrics.md"]
+    output: ["src/ui/Analytics.tsx"]

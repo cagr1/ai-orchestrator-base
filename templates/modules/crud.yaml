@@ -1,0 +1,21 @@
+version: "1.0"
+module: "crud"
+tasks:
+  - id: "T1"
+    title: "Definir entidad y campos"
+    description: "Modelo y validaciones"
+    skill: "architecture/api-design"
+    input: []
+    output: ["docs/entity-spec.md"]
+  - id: "T2"
+    title: "API CRUD"
+    description: "Endpoints create/read/update/delete"
+    skill: "backend/node-api"
+    input: ["docs/entity-spec.md"]
+    output: ["src/api/entity/"]
+  - id: "T3"
+    title: "UI CRUD"
+    description: "Tabla, formulario, filtros"
+    skill: "frontend/react-hooks"
+    input: ["docs/entity-spec.md"]
+    output: ["src/ui/Entity.tsx"]

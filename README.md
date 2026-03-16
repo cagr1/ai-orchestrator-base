@@ -45,6 +45,10 @@ ai-orchestrator-base/
 │   ├── status.md          # Dashboard compacto (progreso, riesgos)
 │   └── events.log         # Auditoría de eventos
 │   └── runs/              # Historial por ejecución (gitignored)
+│   ├── skills_index.json  # Índice de skills (generado)
+│   ├── provider.json      # Proveedor activo (generado)
+│   ├── cost.json          # Presupuesto y gasto (generado)
+│   └── splits/            # Sugerencias de split (generado)
 │   ├── config.json        # Configuración de límites
 │   └── evidence/          # Evidencias de ejecución (task_id.json)
 ├── agents/                # Definición de agentes
@@ -53,6 +57,10 @@ ai-orchestrator-base/
 │   ├── qa.md              # Valida output (PASS/FAIL)
 │   ├── reviewer.md        # Evalúa calidad (Score 1-10)
 │   └── checkpoint.md      # Resume progreso en checkpoints
+│   └── prompts/            # Scaffolds de prompts por rol
+├── templates/             # Templates de modulos
+│   └── modules/
+├── domain-packs/          # Packs para dominios no-dev
 ├── skills/                # Biblioteca de skills por categoría
 │   ├── frontend/
 │   ├── backend/
@@ -110,6 +118,21 @@ node runner.js plan "Tu solicitud"
 
 # Validar tasks.yaml contra config
 node runner.js validate
+
+# Indexar skills y buscar
+node runner.js skills
+node runner.js skills search "frontend"
+
+# Sugerir split de tarea grande
+node runner.js split T1
+
+# Seleccionar proveedor
+node runner.js provider list
+node runner.js provider use kilo
+
+# Presupuesto y gasto
+node runner.js cost set 50
+node runner.js cost add 1.25
 
 # Marcar tarea como done (auto evidencia si hay git diff)
 node runner.js done T1
@@ -349,9 +372,23 @@ El runner lee `system/config.json`. Soporta un bloque `limits` (opcional) para a
   "tasks": {
     "id_pattern": "^T\\d+(_fix)?$"
   },
+  "providers": {
+    "kilo": {
+      "type": "kilo",
+      "base_url": ""
+    }
+  },
+  "active_provider": "kilo",
+  "cost_budget": {
+    "max_usd": 50
+  },
   "retention": {
     "events_max_lines": 2000,
     "evidence_max_days": 30
+  },
+  "review_hooks": {
+    "auto_run": false,
+    "commands": ["npm test"]
   },
   "redaction": {
     "enabled": true

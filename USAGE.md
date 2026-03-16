@@ -127,6 +127,11 @@ Genera/actualiza `system/context.md` con un resumen corto del estado (goal, tare
 - `system/events.log`: bitácora de eventos (init, run, done, fail, verify).
 - `system/runs/<run_id>/history.log`: historial resumido por ejecución (gitignore).
 
+## 📦 Templates y Domain Packs
+
+- `templates/modules/` contiene ejemplos de tareas (auth, crud, payments, analytics).
+- `domain-packs/` ofrece packs para data, finanzas y ops.
+
 ## 🔒 Concurrencia
 
 `tasks.yaml` usa lock optimista: si cambia entre lectura y guardado, el runner detiene la operación para evitar conflictos.
@@ -210,6 +215,50 @@ node runner.js verify
 ```
 
 Verifica evidencia para todas las tareas `done` (R10 y criterios de aceptacion si se requieren).
+
+---
+
+### `skills` - Registro de Skills
+
+```bash
+node runner.js skills
+node runner.js skills search "frontend"
+node runner.js skills rebuild
+```
+
+Genera/consulta `system/skills_index.json` para búsqueda rápida.
+
+---
+
+### `split` - Sugerir Split de Tarea
+
+```bash
+node runner.js split T1
+```
+
+Si la tarea viola R9, crea sugerencias en `system/splits/T1.yaml` sin modificar `tasks.yaml`.
+
+---
+
+### `provider` - Selección de Proveedor
+
+```bash
+node runner.js provider list
+node runner.js provider use kilo
+```
+
+Guarda el proveedor activo en `system/provider.json`.
+
+---
+
+### `cost` - Presupuesto y Gasto
+
+```bash
+node runner.js cost set 50
+node runner.js cost add 1.25
+```
+
+Actualiza `system/cost.json` y refleja el gasto en `system/status.md`.
 
 ---
 
@@ -405,9 +454,23 @@ El runner lee `system/config.json` en cada `run/resume`. Puedes definir `limits`
   "tasks": {
     "id_pattern": "^T\\d+(_fix)?$"
   },
+  "providers": {
+    "kilo": {
+      "type": "kilo",
+      "base_url": ""
+    }
+  },
+  "active_provider": "kilo",
+  "cost_budget": {
+    "max_usd": 50
+  },
   "retention": {
     "events_max_lines": 2000,
     "evidence_max_days": 30
+  },
+  "review_hooks": {
+    "auto_run": false,
+    "commands": ["npm test"]
   },
   "redaction": {
     "enabled": true

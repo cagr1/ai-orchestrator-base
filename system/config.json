@@ -11,6 +11,14 @@
       "cognitive-solution-evaluator",
       "cognitive-dependency-reasoner"
     ],
+    "domain": [
+      "data-eda",
+      "data-cleaning",
+      "finance-financial-analysis",
+      "finance-risk-modeling",
+      "ops-process-analysis",
+      "ops-ops-reporting"
+    ],
     "basic": [
       "frontend-react-hooks",
       "frontend-vue-composition",
@@ -218,9 +226,28 @@
     "id_pattern": "^T\\d+(_fix)?$"
   },
 
+  "providers": {
+    "kilo": {
+      "type": "kilo",
+      "base_url": ""
+    }
+  },
+  "active_provider": "kilo",
+
+  "cost_budget": {
+    "max_usd": 50
+  },
+
   "retention": {
     "events_max_lines": 2000,
     "evidence_max_days": 30
+  },
+
+  "review_hooks": {
+    "auto_run": false,
+    "commands": [
+      "npm test"
+    ]
   },
 
   "redaction": {

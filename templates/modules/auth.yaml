@@ -1,0 +1,21 @@
+version: "1.0"
+module: "auth"
+tasks:
+  - id: "T1"
+    title: "Definir contrato de autenticacion"
+    description: "Endpoints, payloads y reglas de seguridad"
+    skill: "security/api-security"
+    input: []
+    output: ["docs/auth-contract.md"]
+  - id: "T2"
+    title: "Implementar endpoints de auth"
+    description: "Login, refresh y logout"
+    skill: "backend/node-api"
+    input: ["docs/auth-contract.md"]
+    output: ["src/api/auth/"]
+  - id: "T3"
+    title: "UI de login"
+    description: "Formulario y validaciones"
+    skill: "frontend/react-hooks"
+    input: ["docs/auth-contract.md"]
+    output: ["src/ui/Login.tsx"]
