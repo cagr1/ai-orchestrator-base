@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const { execSync } = require('child_process');
+const crypto = require('crypto');
 
 const ROOT_DIR = __dirname;
 const SYSTEM_DIR = path.join(ROOT_DIR, 'system');
@@ -23,6 +24,7 @@ const CONTEXT_FILE = path.join(SYSTEM_DIR, 'context.md');
 const PLAN_REQUEST_FILE = path.join(SYSTEM_DIR, 'plan_request.md');
 const EVENTS_FILE = path.join(SYSTEM_DIR, 'events.log');
 const STATUS_FILE = path.join(SYSTEM_DIR, 'status.md');
+const RUNS_DIR = path.join(SYSTEM_DIR, 'runs');
 
 // ============================================================
 // FILE OPERATIONS
@@ -71,13 +73,54 @@ const ensureDir = (dirPath) => {
 
 const nowIso = () => new Date().toISOString();
 
+const redactText = (text, config) => {
+  const enabled = config?.redaction?.enabled !== false;
+  if (!enabled || !text) return text || '';
+
+  let out = String(text);
+  out = out.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]');
+  out = out.replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED_AWS_KEY]');
+  out = out.replace(/\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g, '[REDACTED_TOKEN]');
+  out = out.replace(/\b[a-f0-9]{32,}\b/gi, '[REDACTED_HEX]');
+  out = out.replace(/\b(api[_-]?key|token|secret|password)\s*[:=]\s*([^\s]+)/gi, '$1=[REDACTED]');
+  return out;
+};
+
 const appendEvent = (type, data = {}) => {
   const kv = Object.entries(data)
-    .map(([k, v]) => `${k}=${String(v).replace(/\s+/g, '_')}`)
+    .map(([k, v]) => `${k}=${redactText(String(v), loadRuntimeConfig()).replace(/\s+/g, '_')}`)
     .join(' ');
   const line = `${nowIso()} | ${type}${kv ? ' | ' + kv : ''}\n`;
   const existing = readFile(EVENTS_FILE) || '';
   writeFile(EVENTS_FILE, existing + line);
+};
+
+const applyRetentionPolicies = () => {
+  const config = loadRuntimeConfig();
+  const retention = config?.retention || {};
+  const eventsMaxLines = retention.events_max_lines || 2000;
+  const evidenceMaxDays = retention.evidence_max_days || 30;
+
+  if (fileExists(EVENTS_FILE)) {
+    const lines = (readFile(EVENTS_FILE) || '').trim().split('\n').filter(Boolean);
+    if (lines.length > eventsMaxLines) {
+      const trimmed = lines.slice(-eventsMaxLines);
+      writeFile(EVENTS_FILE, trimmed.join('\n') + '\n');
+    }
+  }
+
+  if (fileExists(EVIDENCE_DIR)) {
+    const now = Date.now();
+    const maxAgeMs = evidenceMaxDays * 24 * 60 * 60 * 1000;
+    const files = fs.readdirSync(EVIDENCE_DIR).filter(f => f.endsWith('.json'));
+    for (const file of files) {
+      const full = path.join(EVIDENCE_DIR, file);
+      const stat = fs.statSync(full);
+      if (now - stat.mtimeMs > maxAgeMs) {
+        fs.unlinkSync(full);
+      }
+    }
+  }
 };
 
 // ============================================================
@@ -265,6 +308,29 @@ const writeStatusDashboard = (state, tasksDoc) => {
   writeFile(STATUS_FILE, lines.join('\n'));
 };
 
+const appendRunHistory = (state, tasksDoc, note = '') => {
+  ensureDir(RUNS_DIR);
+  const runDir = path.join(RUNS_DIR, state.run_id || 'unknown');
+  ensureDir(runDir);
+  const historyFile = path.join(runDir, 'history.log');
+
+  const meta = tasksDoc?.metadata || {};
+  const line = [
+    nowIso(),
+    `phase=${state.phase || '-'}`,
+    `status=${state.status || '-'}`,
+    `completed=${meta.completed || 0}`,
+    `pending=${meta.pending || 0}`,
+    `failed=${meta.failed || 0}`,
+    `blocked=${meta.blocked || 0}`,
+    `halt=${state.halt_reason || '-'}`,
+    note ? `note=${note.replace(/\s+/g, '_')}` : ''
+  ].filter(Boolean).join(' | ');
+
+  const existing = readFile(historyFile) || '';
+  writeFile(historyFile, existing + line + '\n');
+};
+
 const buildPlanRequest = (state, tasksDoc, config, newPrompt) => {
   const goal = readFile(GOAL_FILE) || '';
   const context = readFile(CONTEXT_FILE) || '';
@@ -446,6 +512,24 @@ const loadTasks = () => {
 
 const saveTasks = (tasks) => {
   writeYAML(TASKS_FILE, tasks);
+};
+
+const computeFileHash = (filepath) => {
+  const content = readFile(filepath);
+  if (!content) return null;
+  return crypto.createHash('sha256').update(content).digest('hex');
+};
+
+const saveTasksWithLock = (tasks, expectedHash) => {
+  const currentHash = computeFileHash(TASKS_FILE);
+  if (expectedHash && currentHash && expectedHash !== currentHash) {
+    return { ok: false, reason: 'tasks_yaml_conflict' };
+  }
+  if (Array.isArray(tasks.tasks)) {
+    tasks.tasks = sortTasksDeterministic(tasks.tasks);
+  }
+  saveTasks(tasks);
+  return { ok: true };
 };
 
 const initializeTasks = (runId) => {
@@ -737,11 +821,12 @@ const EVIDENCE_DIR = path.join(SYSTEM_DIR, 'evidence');
 const saveEvidence = (taskId, evidence) => {
   ensureDir(EVIDENCE_DIR);
   const evidenceFile = path.join(EVIDENCE_DIR, `${taskId}.json`);
+  const config = loadRuntimeConfig();
   const data = {
     task_id: taskId,
     executed_at: nowIso(),
     files_changed: evidence.files_changed || [],
-    summary: evidence.summary || ''
+    summary: redactText(evidence.summary || '', config)
   };
   writeJSON(evidenceFile, data);
 };
@@ -936,6 +1021,46 @@ const validateTaskSchema = (task) => {
   }
 };
 
+const compareTaskIds = (a, b) => {
+  const re = /^T(\d+)/;
+  const ma = re.exec(a || '');
+  const mb = re.exec(b || '');
+  if (ma && mb) {
+    const na = parseInt(ma[1], 10);
+    const nb = parseInt(mb[1], 10);
+    if (na !== nb) return na - nb;
+  }
+  return (a || '').localeCompare(b || '');
+};
+
+const sortTasksDeterministic = (tasks) => {
+  return tasks.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return compareTaskIds(a.id, b.id);
+  });
+};
+
+const validateUniqueTaskIds = (tasks) => {
+  const seen = new Set();
+  tasks.forEach(task => {
+    if (seen.has(task.id)) {
+      throw new Error(`Duplicate task id: ${task.id}`);
+    }
+    seen.add(task.id);
+  });
+};
+
+const validateTaskIdPattern = (tasks, config) => {
+  const pattern = config?.tasks?.id_pattern;
+  if (!pattern) return;
+  const re = new RegExp(pattern);
+  tasks.forEach(task => {
+    if (!re.test(task.id)) {
+      throw new Error(`Task id does not match pattern (${pattern}): ${task.id}`);
+    }
+  });
+};
+
 const validateTaskSkills = (tasks, config) => {
   const allowed = getEnabledSkills(config);
   tasks.forEach(task => {
@@ -949,6 +1074,8 @@ const validateTaskSkills = (tasks, config) => {
 const validatePlannedTasks = (tasksDoc, config) => {
   const tasks = tasksDoc.tasks || [];
   tasks.forEach(task => validateTaskSchema(task));
+  validateUniqueTaskIds(tasks);
+  validateTaskIdPattern(tasks, config);
   validateTaskSkills(tasks, config);
   validateDependencies(tasks);
   detectCycles(tasks);
@@ -1433,6 +1560,7 @@ const main = async () => {
     writeContextSnapshot(state, loadTasks());
     writeStatusDashboard(state, loadTasks());
     appendEvent('init', { run_id: state.run_id });
+    applyRetentionPolicies();
     
     console.log(`[INIT] New run initialized: ${state.run_id}`);
     console.log('[INIT] Phase: planning');
@@ -1466,6 +1594,7 @@ const main = async () => {
       console.log(`[STATE] Phase: ${state.phase}`);
       console.log(`[STATE] Iteration: ${state.iteration}/${state.max_iterations}`);
       appendEvent('run_start', { run_id: state.run_id, phase: state.phase, iteration: state.iteration });
+      applyRetentionPolicies();
 
       if (command === 'run' && state.status === 'paused') {
         console.error('[HALT] State is paused. Run: node runner.js resume');
@@ -1479,6 +1608,7 @@ const main = async () => {
       }
 
       const tasksDoc = normalizeTasksDoc(loadTasks());
+      const tasksHash = computeFileHash(TASKS_FILE);
 
       // Planning gate: `run` needs tasks planned first.
       if (state.phase === 'planning' && tasksDoc.tasks.length === 0) {
@@ -1556,6 +1686,7 @@ const main = async () => {
       // Refresh context snapshot each run (cheap, small).
       writeContextSnapshot(state, tasksDoc);
       writeStatusDashboard(state, tasksDoc);
+      appendRunHistory(state, tasksDoc, 'run');
 
       if (!canExecuteMoreTasks(state)) {
         console.log(`[HALT] ${state.halt_reason}`);
@@ -1565,7 +1696,12 @@ const main = async () => {
       // Completion detection is cheap: do it before proposing new work.
       if (checkProjectCompletion(tasksDoc.tasks, state)) {
         console.log('[DONE] All tasks are completed.');
-        saveTasks(tasksDoc);
+        const saved = saveTasksWithLock(tasksDoc, tasksHash);
+        if (!saved.ok) {
+          state.phase = 'needs_review';
+          state.status = 'needs_review';
+          state.halt_reason = saved.reason;
+        }
         return;
       }
 
@@ -1584,7 +1720,12 @@ const main = async () => {
         state.phase = 'needs_review';
         state.status = 'needs_review';
         state.halt_reason = 'no_executable_tasks';
-        saveTasks(tasksDoc);
+        const saved = saveTasksWithLock(tasksDoc, tasksHash);
+        if (!saved.ok) {
+          state.phase = 'needs_review';
+          state.status = 'needs_review';
+          state.halt_reason = saved.reason;
+        }
         return;
       }
 
@@ -1610,7 +1751,14 @@ const main = async () => {
       state.iteration += 1;
       state.halt_reason = 'batch_ready';
 
-      saveTasks(tasksDoc);
+      {
+        const saved = saveTasksWithLock(tasksDoc, tasksHash);
+        if (!saved.ok) {
+          state.phase = 'needs_review';
+          state.status = 'needs_review';
+          state.halt_reason = saved.reason;
+        }
+      }
       appendEvent('batch_ready', { run_id: state.run_id, batch_size: batch.length });
       
     } finally {
@@ -1776,15 +1924,21 @@ const main = async () => {
       process.exit(1);
     }
     const tasksDoc = normalizeTasksDoc(loadTasks());
+    const tasksHash = computeFileHash(TASKS_FILE);
     const task = markTaskDone(tasksDoc, taskId);
     if (!task) {
       console.error(`[ERROR] Task not found: ${taskId}`);
       process.exit(1);
     }
     onTaskSuccess(state);
-    saveTasks(tasksDoc);
+    const saved = saveTasksWithLock(tasksDoc, tasksHash);
+    if (!saved.ok) {
+      console.error('[ERROR] tasks.yaml changed by another actor. Retry.');
+      process.exit(1);
+    }
     saveState(state);
     writeStatusDashboard(state, tasksDoc);
+    appendRunHistory(state, tasksDoc, 'done');
 
     if (getEvidenceConfig(runtimeConfig).required) {
       const files = args.slice(2);
@@ -1807,6 +1961,7 @@ const main = async () => {
       process.exit(1);
     }
     const tasksDoc = normalizeTasksDoc(loadTasks());
+    const tasksHash = computeFileHash(TASKS_FILE);
     const taskId = args[1];
     if (!taskId) {
       console.error('[ERROR] Missing task id. Usage: node runner.js fail T1 "reason"');
@@ -1819,9 +1974,14 @@ const main = async () => {
       process.exit(1);
     }
     const result = processTaskFailure(tasksDoc, taskId, state);
-    saveTasks(tasksDoc);
+    const saved = saveTasksWithLock(tasksDoc, tasksHash);
+    if (!saved.ok) {
+      console.error('[ERROR] tasks.yaml changed by another actor. Retry.');
+      process.exit(1);
+    }
     saveState(state);
     writeStatusDashboard(state, tasksDoc);
+    appendRunHistory(state, tasksDoc, 'fail');
     console.log(`[FAIL] ${result.message}`);
     if (result.blocked_dependents && result.blocked_dependents.length) {
       console.log(`[FAIL] Blocked dependents: ${result.blocked_dependents.join(', ')}`);
@@ -1837,6 +1997,7 @@ const main = async () => {
       process.exit(1);
     }
     const tasksDoc = normalizeTasksDoc(loadTasks());
+    const tasksHash = computeFileHash(TASKS_FILE);
     const taskId = args[1];
     if (!taskId) {
       console.error('[ERROR] Missing task id. Usage: node runner.js retry T1');
@@ -1851,9 +2012,14 @@ const main = async () => {
       console.error(`[ERROR] Task ${taskId} is failed_permanent and cannot be retried`);
       process.exit(1);
     }
-    saveTasks(tasksDoc);
+    const saved = saveTasksWithLock(tasksDoc, tasksHash);
+    if (!saved.ok) {
+      console.error('[ERROR] tasks.yaml changed by another actor. Retry.');
+      process.exit(1);
+    }
     saveState(state);
     writeStatusDashboard(state, tasksDoc);
+    appendRunHistory(state, tasksDoc, 'retry');
     console.log(`[RETRY] Task ${taskId} moved back to pending`);
     appendEvent('retry', { task: taskId });
     return;
@@ -1912,6 +2078,8 @@ module.exports = {
   generateRunId,
   loadTasks,
   saveTasks,
+  saveTasksWithLock,
+  computeFileHash,
   initializeTasks,
   getTaskById,
   updateTask,
@@ -1945,6 +2113,7 @@ module.exports = {
   detectCycles,
   // Phase 14
   validateEvidenceAgainstTask,
+  validatePlannedTasks,
   // Phase 17
   validatePlannerAllowed,
   // Phase 18 - Attempts/Max Attempts (Mejora 2)

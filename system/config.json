@@ -212,5 +212,18 @@
   "context": {
     "max_lines": 120,
     "working_set_limit": 10
+  },
+
+  "tasks": {
+    "id_pattern": "^T\\d+(_fix)?$"
+  },
+
+  "retention": {
+    "events_max_lines": 2000,
+    "evidence_max_days": 30
+  },
+
+  "redaction": {
+    "enabled": true
   }
 }

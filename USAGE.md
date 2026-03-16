@@ -125,6 +125,11 @@ Genera/actualiza `system/context.md` con un resumen corto del estado (goal, tare
 
 - `system/status.md`: resumen de progreso, riesgos y salud de dependencias.
 - `system/events.log`: bitácora de eventos (init, run, done, fail, verify).
+- `system/runs/<run_id>/history.log`: historial resumido por ejecución (gitignore).
+
+## 🔒 Concurrencia
+
+`tasks.yaml` usa lock optimista: si cambia entre lectura y guardado, el runner detiene la operación para evitar conflictos.
 
 ### `review` - Modo Revisión
 
@@ -388,12 +393,24 @@ El runner lee `system/config.json` en cada `run/resume`. Puedes definir `limits`
   },
   "context": {
     "max_memory_entries": 20,
-    "compaction_enabled": true
+    "compaction_enabled": true,
+    "max_lines": 120,
+    "working_set_limit": 10
   },
   "evidence": {
     "required": true,
     "min_files_changed": 1,
     "excluded_paths": ["system/", ".agents/", "node_modules/", ".git/"]
+  },
+  "tasks": {
+    "id_pattern": "^T\\d+(_fix)?$"
+  },
+  "retention": {
+    "events_max_lines": 2000,
+    "evidence_max_days": 30
+  },
+  "redaction": {
+    "enabled": true
   }
 }
 ```

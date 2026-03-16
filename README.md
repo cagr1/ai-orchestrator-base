@@ -44,6 +44,7 @@ ai-orchestrator-base/
 │   ├── context.md         # Resumen corto del estado (cheap context)
 │   ├── status.md          # Dashboard compacto (progreso, riesgos)
 │   └── events.log         # Auditoría de eventos
+│   └── runs/              # Historial por ejecución (gitignored)
 │   ├── config.json        # Configuración de límites
 │   └── evidence/          # Evidencias de ejecución (task_id.json)
 ├── agents/                # Definición de agentes
@@ -125,6 +126,8 @@ node runner.js verify
 # Crear evidencia manual/auto
 node runner.js evidence T1 src/file.js
 ```
+
+Nota: `tasks.yaml` se guarda con orden determinístico y bloqueos optimistas para evitar colisiones entre ediciones paralelas.
 
 ---
 
@@ -335,11 +338,23 @@ El runner lee `system/config.json`. Soporta un bloque `limits` (opcional) para a
   },
   "context": {
     "max_memory_entries": 20,
-    "compaction_enabled": true
+    "compaction_enabled": true,
+    "max_lines": 120,
+    "working_set_limit": 10
   },
   "evidence": {
     "required": true,
     "min_files_changed": 1
+  },
+  "tasks": {
+    "id_pattern": "^T\\d+(_fix)?$"
+  },
+  "retention": {
+    "events_max_lines": 2000,
+    "evidence_max_days": 30
+  },
+  "redaction": {
+    "enabled": true
   }
 }
 ```

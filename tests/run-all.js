@@ -12,6 +12,8 @@ try {
   require('./phase_corrective_tasks.test');
   require('./phase_cli_commands.test');
   require('./phase_sdd_flow.test');
+  require('./phase_skill_hygiene.test');
+  require('./phase_tasks_lock.test');
   
   console.log("\n=== ALL TESTS PASSED ===");
   process.exit(0);

@@ -3,4 +3,8 @@
 Thumbs.db
 system/runs/
 system/evidence/*.json
+system/context.md
+system/status.md
+system/events.log
+system/plan_request.md
 _smoke_test_project/
