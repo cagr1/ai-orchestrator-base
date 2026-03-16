@@ -111,6 +111,16 @@ node runner.js status
 
 ---
 
+### `context` - Refrescar Snapshot
+
+```bash
+node runner.js context
+```
+
+Genera/actualiza `system/context.md` con un resumen corto del estado (goal, tareas pendientes top y memoria reciente) para evitar re-leer todo el proyecto en cada paso.
+
+---
+
 ### `review` - Modo Revisión
 
 ```bash
@@ -120,6 +130,76 @@ node runner.js review
 **Usar cuando:**
 - Estado es `needs_review` (cooldown activado o error crítico)
 - Se necesita intervención manual
+
+---
+
+### `plan` - Crear Solicitud de Planner
+
+```bash
+node runner.js plan "Nueva solicitud o cambio de foco"
+```
+
+Genera `system/plan_request.md` con goal + contexto compacto + tareas pendientes. Esto evita releer todo el repo; el Planner/LLM solo necesita este archivo para proponer `system/plan.md` y `system/tasks.yaml`.
+
+---
+
+### `validate` - Validar Planificacion
+
+```bash
+node runner.js validate
+```
+
+Valida `system/tasks.yaml` contra `system/config.json` (skills permitidas, R9 y dependencias).
+
+---
+
+### `done` - Marcar Tarea como Done
+
+```bash
+node runner.js done T1
+```
+
+Marca la tarea como `done` y, si la evidencia es requerida, intenta generar `system/evidence/T1.json` a partir de `git diff --name-only` (o usando archivos pasados como argumentos).
+
+---
+
+### `fail` - Marcar Tarea como Failed
+
+```bash
+node runner.js fail T1 "motivo"
+```
+
+Incrementa intentos y bloquea dependientes si se agotan los reintentos.
+
+---
+
+### `retry` - Reintentar Tarea
+
+```bash
+node runner.js retry T1
+```
+
+Mueve la tarea a `pending` si no es `failed_permanent`.
+
+---
+
+### `evidence` - Crear Evidencia
+
+```bash
+node runner.js evidence T1 src/file.js
+```
+
+Escribe `system/evidence/T1.json` con archivos cambiados. Si no pasas archivos, usa `git diff --name-only`.
+
+---
+
+### `verify` - Validar Evidencias
+
+```bash
+node runner.js verify
+```
+
+Verifica evidencia para todas las tareas `done` (R10 y criterios de aceptacion si se requieren).
 
 ---
 
@@ -289,6 +369,8 @@ metadata:
 
 ### system/config.json
 
+El runner lee `system/config.json` en cada `run/resume`. Puedes definir `limits` para ajustar topes de ejecucion y `evidence` para enforcement (el repo puede incluir otros campos adicionales para selector de skills).
+
 ```json
 {
   "version": "3.0",
@@ -306,7 +388,7 @@ metadata:
   "evidence": {
     "required": true,
     "min_files_changed": 1,
-    "project_root": "/ruta/a/tu/proyecto"
+    "excluded_paths": ["system/", ".agents/", "node_modules/", ".git/"]
   }
 }
 ```
@@ -337,7 +419,7 @@ Toda tarea debe satisfacer:
 - Modificar archivos no listados
 - Agregar tareas nuevas a tasks.yaml
 
-**Validación:** La evidencia se valida contra `task.output`. Reduce alucinaciones ~70%.
+**Validación:** La evidencia se valida contra `task.output` para reducir cambios implícitos/no autorizados.
 
 ---
 

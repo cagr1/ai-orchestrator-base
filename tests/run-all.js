@@ -10,6 +10,8 @@ try {
   require('./phase_attempts.test');
   require('./phase_memory_compaction.test');
   require('./phase_corrective_tasks.test');
+  require('./phase_cli_commands.test');
+  require('./phase_sdd_flow.test');
   
   console.log("\n=== ALL TESTS PASSED ===");
   process.exit(0);

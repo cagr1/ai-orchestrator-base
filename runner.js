@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const { execSync } = require('child_process');
 
 const ROOT_DIR = __dirname;
 const SYSTEM_DIR = path.join(ROOT_DIR, 'system');
@@ -18,6 +19,8 @@ const TASKS_FILE = path.join(SYSTEM_DIR, 'tasks.yaml');
 const MEMORY_FILE = path.join(SYSTEM_DIR, 'memory.md');
 const STATE_FILE = path.join(SYSTEM_DIR, 'state.json');
 const CONFIG_FILE = path.join(SYSTEM_DIR, 'config.json');
+const CONTEXT_FILE = path.join(SYSTEM_DIR, 'context.md');
+const PLAN_REQUEST_FILE = path.join(SYSTEM_DIR, 'plan_request.md');
 
 // ============================================================
 // FILE OPERATIONS
@@ -46,6 +49,8 @@ const writeJSON = (filepath, data) => {
   writeFile(filepath, JSON.stringify(data, null, 2));
 };
 
+const fileExists = (filepath) => fs.existsSync(filepath);
+
 const readYAML = (filepath) => {
   const content = readFile(filepath);
   if (!content) return null;
@@ -60,6 +65,155 @@ const ensureDir = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
   }
+};
+
+const nowIso = () => new Date().toISOString();
+
+// ============================================================
+// CONTEXT SNAPSHOT (Cheap Memory Layer)
+// ============================================================
+
+const extractGoalSummary = () => {
+  const goal = readFile(GOAL_FILE) || '';
+  const lines = goal
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    .filter(l => l !== '# Goal');
+  return lines.slice(0, 3).join(' ');
+};
+
+const getRecentMemoryNotes = (maxEntries = 3) => {
+  const content = readFile(MEMORY_FILE);
+  if (!content) return [];
+
+  const parts = content.split(/^##\s+/gm).filter(p => p.trim());
+  const recent = parts.slice(-maxEntries);
+  return recent.map(p => {
+    const lines = p.split('\n').map(l => l.trim()).filter(Boolean);
+    const title = lines[0] || 'Memory';
+    const firstDetail = lines.slice(1).find(l => l.startsWith('-')) || '';
+    return firstDetail ? `${title} ${firstDetail}` : title;
+  });
+};
+
+const getTopPendingTasks = (tasksDoc, limit = 5) => {
+  const list = tasksDoc?.tasks || [];
+  const pending = list.filter(t => t.estado === 'pending');
+  const sorted = pending.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+  return sorted.slice(0, limit).map(t => {
+    const deps = Array.isArray(t.depends_on) && t.depends_on.length > 0
+      ? ` deps:${t.depends_on.join(',')}`
+      : '';
+    return `${t.id}: ${t.title || t.description || '-'}${deps}`;
+  });
+};
+
+const trimLines = (lines, maxLines) => {
+  if (!maxLines || maxLines <= 0) return lines;
+  if (lines.length <= maxLines) return lines;
+  const trimmed = lines.slice(0, maxLines - 1);
+  trimmed.push('... (truncated)');
+  return trimmed;
+};
+
+const writeContextSnapshot = (state, tasksDoc) => {
+  const runtimeConfig = loadRuntimeConfig();
+  const maxLines = runtimeConfig?.context?.max_lines || 120;
+  const workingSetLimit = runtimeConfig?.context?.working_set_limit || 10;
+
+  const goalSummary = extractGoalSummary();
+  const recentNotes = getRecentMemoryNotes();
+  const pending = getTopPendingTasks(tasksDoc);
+  const workingSet = (tasksDoc?.tasks || [])
+    .filter(t => t.estado === 'pending' || t.estado === 'running')
+    .flatMap(t => Array.isArray(t.output) ? t.output : [])
+    .filter(Boolean)
+    .slice(0, workingSetLimit);
+
+  const lines = [
+    '# Context Snapshot',
+    '',
+    `Updated: ${nowIso()}`,
+    `Run ID: ${state.run_id || '-'}`,
+    `Phase: ${state.phase || '-'}`,
+    `Iteration: ${state.iteration}/${state.max_iterations}`,
+    `Status: ${state.status || '-'}`,
+    '',
+    `Goal: ${goalSummary || '(empty)'}`,
+    '',
+    'Top Pending Tasks:',
+    ...(pending.length ? pending.map(p => `- ${p}`) : ['- (none)']),
+    '',
+    'Working Set:',
+    ...(workingSet.length ? workingSet.map(w => `- ${w}`) : ['- (none)']),
+    '',
+    'Recent Memory:',
+    ...(recentNotes.length ? recentNotes.map(n => `- ${n}`) : ['- (none)']),
+    ''
+  ];
+
+  const finalLines = trimLines(lines, maxLines);
+  writeFile(CONTEXT_FILE, finalLines.join('\n'));
+};
+
+const summarizeSkills = (config) => {
+  const enabled = config?.skills_enabled || {};
+  const tiers = Object.keys(enabled);
+  if (tiers.length === 0) return [];
+
+  return tiers.map(tier => {
+    const list = enabled[tier] || [];
+    const preview = list.slice(0, 6).join(', ');
+    const suffix = list.length > 6 ? ` (+${list.length - 6} more)` : '';
+    return `${tier}: ${preview}${suffix}`;
+  });
+};
+
+const buildPlanRequest = (state, tasksDoc, config, newPrompt) => {
+  const goal = readFile(GOAL_FILE) || '';
+  const context = readFile(CONTEXT_FILE) || '';
+  const memory = readFile(MEMORY_FILE) || '';
+  const skillsSummary = summarizeSkills(config);
+
+  const memoryNotes = getRecentMemoryNotes(5);
+  const pending = getTopPendingTasks(tasksDoc, 8);
+
+  const lines = [
+    '# Planner Request',
+    '',
+    'You are the Planner. Create or update system/plan.md and system/tasks.yaml.',
+    '',
+    '## Goal',
+    goal.trim() || '(empty)',
+    '',
+    '## Latest Request',
+    newPrompt ? newPrompt : '(none)',
+    '',
+    '## Context Snapshot',
+    context.trim() || '(none)',
+    '',
+    '## Recent Memory Notes',
+    ...(memoryNotes.length ? memoryNotes.map(n => `- ${n}`) : ['- (none)']),
+    '',
+    '## Top Pending Tasks (if any)',
+    ...(pending.length ? pending.map(p => `- ${p}`) : ['- (none)']),
+    '',
+    '## Skills Enabled (summary)',
+    ...(skillsSummary.length ? skillsSummary.map(s => `- ${s}`) : ['- (none)']),
+    '',
+    '## Output Requirements',
+    '- system/plan.md with phases, skills and exit criteria',
+    '- system/tasks.yaml with fields: id, title, description, skill, estado, priority, depends_on, attempts, max_attempts, input, output',
+    '- Ensure tasks are small (R9) and have explicit input/output',
+    '- Use only skills from system/config.json',
+    ''
+  ];
+
+  return lines.join('\n');
 };
 
 // ============================================================
@@ -85,6 +239,9 @@ const initializeState = (goal, config) => {
     
     execution_control: {
       tasks_completed: 0,
+      // Baseline used to measure "tasks completed this session" across multiple `run`s.
+      // This allows enforcing `max_tasks_per_run` without requiring an interactive runner.
+      session_baseline_completed: 0,
       max_tasks_per_run: 5,
       last_checkpoint: 0,
       checkpoint_interval: 5,
@@ -118,6 +275,36 @@ const loadState = () => {
 const saveState = (state) => {
   state.last_updated = new Date().toISOString();
   writeJSON(STATE_FILE, state);
+};
+
+// ============================================================
+// RUNTIME CONFIG (Optional)
+// - Keep initializeState deterministic for tests
+// - Allow operators to tune limits without editing code
+// ============================================================
+
+const loadRuntimeConfig = () => {
+  return readJSON(CONFIG_FILE) || {};
+};
+
+const applyRuntimeConfigToState = (state, config) => {
+  if (!config || typeof config !== 'object') return;
+
+  // Support both a `limits` block (documented) and legacy flat fields.
+  const limits = config.limits || {};
+  const maxTasks = limits.max_tasks_per_run ?? config.max_tasks_per_run;
+  const maxIters = limits.max_iterations ?? config.max_iterations;
+  const maxBatch = limits.max_batch_size ?? config.max_batch_size;
+  const cooldown = limits.cooldown_threshold ?? config.cooldown_threshold;
+  const checkpointInterval = limits.checkpoint_interval ?? config.checkpoint_interval;
+
+  if (typeof maxIters === 'number') state.max_iterations = maxIters;
+  if (typeof maxTasks === 'number') state.execution_control.max_tasks_per_run = maxTasks;
+  if (typeof maxBatch === 'number') state.parallel_batch.max_batch_size = maxBatch;
+  if (typeof checkpointInterval === 'number') state.execution_control.checkpoint_interval = checkpointInterval;
+
+  // Keep cooldown in state only if the schema has it; otherwise default logic applies.
+  if (typeof cooldown === 'number') state.execution_control.cooldown_threshold = cooldown;
 };
 
 // ============================================================
@@ -172,7 +359,7 @@ const saveTasks = (tasks) => {
 const initializeTasks = (runId) => {
   const tasks = {
     version: "3.0",
-    generated_at: new Date().toISOString(),
+    generated_at: nowIso(),
     run_id: runId,
     tasks: [],
     metadata: {
@@ -207,7 +394,7 @@ const updateTask = (tasks, taskId, updates) => {
   if (!task) return null;
   
   Object.assign(task, updates);
-  task.updated_at = new Date().toISOString();
+  task.updated_at = nowIso();
   updateTaskMetadata(tasks);
   return task;
 };
@@ -288,7 +475,8 @@ const shouldCreateCheckpoint = (state) => {
 const createCheckpoint = (state, tasks) => {
   // Update memory.md with summary
   const summary = generateMemorySummary(tasks);
-  appendToMemory(summary);
+  // Append with compaction to keep context bounded over long runs.
+  appendToMemoryWithCompaction(summary);
   
   // Update checkpoint tracking
   state.execution_control.last_checkpoint = state.execution_control.tasks_completed;
@@ -459,7 +647,7 @@ const saveEvidence = (taskId, evidence) => {
   const evidenceFile = path.join(EVIDENCE_DIR, `${taskId}.json`);
   const data = {
     task_id: taskId,
-    executed_at: new Date().toISOString(),
+    executed_at: nowIso(),
     files_changed: evidence.files_changed || [],
     summary: evidence.summary || ''
   };
@@ -469,6 +657,41 @@ const saveEvidence = (taskId, evidence) => {
 const loadEvidence = (taskId) => {
   const evidenceFile = path.join(EVIDENCE_DIR, `${taskId}.json`);
   return readJSON(evidenceFile);
+};
+
+const getEvidenceConfig = (config) => {
+  const evidence = config?.evidence || {};
+  return {
+    required: evidence.required !== false,
+    min_files_changed: typeof evidence.min_files_changed === 'number' ? evidence.min_files_changed : 1,
+    excluded_paths: Array.isArray(evidence.excluded_paths)
+      ? evidence.excluded_paths
+      : ['system/', '.agents/', 'node_modules/', '.git/', 'dist/', 'build/', '.next/']
+  };
+};
+
+const filterExcludedPaths = (files, excludedPrefixes) => {
+  return files.filter(file => !excludedPrefixes.some(prefix => file.startsWith(prefix)));
+};
+
+const getGitDiffFiles = () => {
+  try {
+    const output = execSync('git diff --name-only', { encoding: 'utf-8' }).trim();
+    if (!output) return [];
+    return output.split('\n').map(l => l.trim()).filter(Boolean);
+  } catch (_e) {
+    return [];
+  }
+};
+
+const createEvidenceForTask = (taskId, filesChanged, summary, config) => {
+  const evidenceConfig = getEvidenceConfig(config);
+  const cleaned = filterExcludedPaths(filesChanged, evidenceConfig.excluded_paths);
+  saveEvidence(taskId, {
+    files_changed: cleaned,
+    summary: summary || 'Auto-generated evidence'
+  });
+  return cleaned;
 };
 
 // ============================================================
@@ -543,6 +766,104 @@ const checkProjectCompletion = (tasks, state) => {
 };
 
 // ============================================================
+// TASKS.YAML VALIDATION + SESSION ACCOUNTING
+// ============================================================
+
+const normalizeTasksDoc = (tasksDoc) => {
+  if (!tasksDoc || typeof tasksDoc !== "object") {
+    throw new Error("TASKS_YAML_MISSING_OR_INVALID");
+  }
+  if (!Array.isArray(tasksDoc.tasks)) {
+    throw new Error('TASKS_YAML_SCHEMA_INVALID: "tasks" must be an array');
+  }
+  if (!tasksDoc.metadata || typeof tasksDoc.metadata !== "object") {
+    tasksDoc.metadata = {};
+  }
+  updateTaskMetadata(tasksDoc);
+  return tasksDoc;
+};
+
+const getCompletedCount = (tasksDoc) => {
+  if (tasksDoc?.metadata && typeof tasksDoc.metadata.completed === "number") {
+    return tasksDoc.metadata.completed;
+  }
+  const list = tasksDoc?.tasks || [];
+  return list.filter(t => t.estado === "done").length;
+};
+
+const ensureSessionBaseline = (state, tasksDoc, command) => {
+  const completedNow = getCompletedCount(tasksDoc);
+
+  if (!state.execution_control) state.execution_control = {};
+  if (typeof state.execution_control.session_baseline_completed !== "number") {
+    state.execution_control.session_baseline_completed = completedNow;
+  }
+
+  // `resume` starts a new "execution session" window.
+  if (command === "resume") {
+    state.execution_control.session_baseline_completed = completedNow;
+    state.execution_control.tasks_completed = 0;
+    state.execution_control.consecutive_failures = 0;
+    state.execution_control.cooldown_trigger = false;
+    state.status = "running";
+    if (state.phase === "paused") state.phase = "execution";
+    return;
+  }
+
+  // Derive "tasks completed this session" from tasks.yaml, not from ephemeral memory.
+  const baseline = state.execution_control.session_baseline_completed;
+  state.execution_control.tasks_completed = Math.max(0, completedNow - baseline);
+};
+
+// ============================================================
+// PLANNING VALIDATION
+// ============================================================
+
+const normalizeSkillName = (skill) => {
+  if (!skill) return '';
+  return skill.replace(/\//g, '-').replace(/\.md$/, '');
+};
+
+const getEnabledSkills = (config) => {
+  const enabled = config?.skills_enabled || {};
+  const sets = Object.values(enabled).flat();
+  return new Set(sets.map(s => normalizeSkillName(s)));
+};
+
+const validateTaskSchema = (task) => {
+  const requiredFields = ['id', 'title', 'description', 'skill', 'estado', 'priority', 'depends_on', 'input', 'output'];
+  const missing = requiredFields.filter(field => task[field] === undefined);
+  if (missing.length) {
+    throw new Error(`Task ${task.id || '(unknown)'} missing fields: ${missing.join(', ')}`);
+  }
+  if (!Array.isArray(task.depends_on)) {
+    throw new Error(`Task ${task.id} depends_on must be an array`);
+  }
+  if (!Array.isArray(task.input) || !Array.isArray(task.output)) {
+    throw new Error(`Task ${task.id} input/output must be arrays`);
+  }
+};
+
+const validateTaskSkills = (tasks, config) => {
+  const allowed = getEnabledSkills(config);
+  tasks.forEach(task => {
+    const skill = normalizeSkillName(task.skill);
+    if (!allowed.has(skill)) {
+      throw new Error(`Task ${task.id} uses skill not enabled in config: ${task.skill}`);
+    }
+  });
+};
+
+const validatePlannedTasks = (tasksDoc, config) => {
+  const tasks = tasksDoc.tasks || [];
+  tasks.forEach(task => validateTaskSchema(task));
+  validateTaskSkills(tasks, config);
+  validateDependencies(tasks);
+  detectCycles(tasks);
+  validateAllTasks(tasks);
+};
+
+// ============================================================
 // PHASE 13: DEPENDENCY VALIDATION
 // ============================================================
 
@@ -609,6 +930,15 @@ const validateEvidenceAgainstTask = (task, evidence) => {
   });
 };
 
+const validateAcceptanceCriteria = (task, config) => {
+  const requireAcceptance = config?.review_criteria?.require_acceptance_criteria === true;
+  if (!requireAcceptance) return;
+  const criteria = task.acceptance_criteria;
+  if (!criteria || (Array.isArray(criteria) && criteria.length === 0)) {
+    throw new Error(`Missing acceptance_criteria in task ${task.id}`);
+  }
+};
+
 // ============================================================
 // PHASE 17: R11 PLANNER GUARDRAIL (Anti-Destruction)
 // ============================================================
@@ -646,7 +976,7 @@ const incrementTaskAttempts = (tasks, taskId) => {
   }
   
   task.attempts += 1;
-  task.updated_at = new Date().toISOString();
+  task.updated_at = nowIso();
   updateTaskMetadata(tasks);
   
   return task;
@@ -677,7 +1007,7 @@ const markTaskFailedPermanent = (tasks, taskId) => {
   if (!task) return null;
   
   task.estado = "failed_permanent";
-  task.updated_at = new Date().toISOString();
+  task.updated_at = nowIso();
   updateTaskMetadata(tasks);
   
   return task;
@@ -702,7 +1032,7 @@ const handleDependentTasksOnFailure = (tasks, failedTaskId) => {
     // Check if this task depends on the failed task
     if (task.depends_on && task.depends_on.includes(failedTaskId)) {
       task.estado = "blocked";
-      task.updated_at = new Date().toISOString();
+      task.updated_at = nowIso();
       blockedTasks.push(task.id);
     }
   });
@@ -825,8 +1155,8 @@ const createCorrectiveTask = (tasks, failedTaskId, fixDescription) => {
     output: [...(originalTask.output || [])],
     skill: originalTask.skill,
     original_task: failedTaskId, // Reference to original task
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+    created_at: nowIso(),
+    updated_at: nowIso()
   };
   
   tasks.tasks.push(correctiveTask);
@@ -857,7 +1187,7 @@ const linkDependentToCorrective = (tasks, failedTaskId, correctiveTaskId) => {
       if (!task.depends_on.includes(correctiveTaskId)) {
         task.depends_on.push(correctiveTaskId);
         task.corrective_link = failedTaskId; // Track the original dependency
-        task.updated_at = new Date().toISOString();
+        task.updated_at = nowIso();
         updatedDependents.push(task.id);
       }
     }
@@ -929,6 +1259,43 @@ const recalculateTaskStates = (tasks) => {
 };
 
 // ============================================================
+// TASK MUTATION HELPERS (CLI)
+// ============================================================
+
+const markTaskDone = (tasksDoc, taskId) => {
+  const task = getTaskById(tasksDoc, taskId);
+  if (!task) return null;
+  task.estado = "done";
+  task.updated_at = nowIso();
+  updateTaskMetadata(tasksDoc);
+  return task;
+};
+
+const markTaskFailed = (tasksDoc, taskId, reason) => {
+  const task = getTaskById(tasksDoc, taskId);
+  if (!task) return null;
+  task.estado = "failed";
+  if (reason) {
+    task.failure_reason = reason;
+  }
+  task.updated_at = nowIso();
+  updateTaskMetadata(tasksDoc);
+  return task;
+};
+
+const markTaskPending = (tasksDoc, taskId) => {
+  const task = getTaskById(tasksDoc, taskId);
+  if (!task) return null;
+  if (task.estado === "failed_permanent") {
+    return { error: "failed_permanent" };
+  }
+  task.estado = "pending";
+  task.updated_at = nowIso();
+  updateTaskMetadata(tasksDoc);
+  return task;
+};
+
+// ============================================================
 // CLI COMMANDS
 // ============================================================
 
@@ -938,6 +1305,9 @@ const printStatus = () => {
     console.log('[ERROR] No state found. Run: node runner.js init "Your goal"');
     return;
   }
+
+  const runtimeConfig = loadRuntimeConfig();
+  applyRuntimeConfigToState(state, runtimeConfig);
   
   console.log('[STATUS] Current run state');
   console.log(`- run_id: ${state.run_id || '-'}`);
@@ -967,6 +1337,8 @@ const main = async () => {
     
     const state = initializeState(goal, config);
     initializeTasks(state.run_id);
+    // Initialize a cheap context snapshot for future runs.
+    writeContextSnapshot(state, loadTasks());
     
     console.log(`[INIT] New run initialized: ${state.run_id}`);
     console.log('[INIT] Phase: planning');
@@ -987,6 +1359,9 @@ const main = async () => {
       console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
       process.exit(1);
     }
+
+    const runtimeConfig = loadRuntimeConfig();
+    applyRuntimeConfigToState(state, runtimeConfig);
     
     // Phase 1: Validate and acquire lock
     validateLock(state);
@@ -996,11 +1371,150 @@ const main = async () => {
       console.log(`[${command.toUpperCase()}] Starting execution...`);
       console.log(`[STATE] Phase: ${state.phase}`);
       console.log(`[STATE] Iteration: ${state.iteration}/${state.max_iterations}`);
-      
-      // TODO: Implement execution logic in future phases
-      
-      console.log('[INFO] Execution logic to be implemented in Phase 2+');
-      console.log('[INFO] Current implementation: Phase 1 (State + Lock) complete');
+
+      if (command === 'run' && state.status === 'paused') {
+        console.error('[HALT] State is paused. Run: node runner.js resume');
+        state.halt_reason = 'paused_requires_resume';
+        return;
+      }
+
+      if (!checkIterationLimit(state)) {
+        console.error(`[HALT] ${state.halt_reason}`);
+        return;
+      }
+
+      const tasksDoc = normalizeTasksDoc(loadTasks());
+
+      // Planning gate: `run` needs tasks planned first.
+      if (state.phase === 'planning' && tasksDoc.tasks.length === 0) {
+        console.log('[ACTION] Planner required: populate system/tasks.yaml with tasks (input/output/depends_on).');
+        state.halt_reason = 'no_tasks_planned';
+        return;
+      }
+
+      // Transition to execution once tasks exist.
+      if (state.phase === 'planning') {
+        state.phase = 'execution';
+      }
+
+      // Deterministic recalculation + metadata normalization.
+      tasksDoc.tasks = recalculateTaskStates(tasksDoc.tasks);
+      updateTaskMetadata(tasksDoc);
+
+      // Validations: dependency integrity, cycles, and R9.
+      validatePlannedTasks(tasksDoc, runtimeConfig);
+
+      // Evidence enforcement (R10) for tasks already marked done.
+      const evidenceCfg = getEvidenceConfig(runtimeConfig);
+      const requireEvidence = evidenceCfg.required;
+      const minFilesChanged = evidenceCfg.min_files_changed;
+      const excludedPaths = evidenceCfg.excluded_paths;
+
+      const isExcluded = (filePath) => excludedPaths.some(prefix => filePath.startsWith(prefix));
+
+      if (requireEvidence) {
+        for (const task of tasksDoc.tasks) {
+          if (task.estado !== 'done') continue;
+
+          const evidence = loadEvidence(task.id);
+          if (!evidence) {
+            console.error(`[HALT] Missing evidence for done task: ${task.id} (expected system/evidence/${task.id}.json)`);
+            state.phase = 'needs_review';
+            state.status = 'needs_review';
+            state.halt_reason = 'missing_evidence_for_done_task';
+            return;
+          }
+
+          const changed = Array.isArray(evidence.files_changed) ? evidence.files_changed : [];
+          if (changed.length < minFilesChanged) {
+            console.error(`[HALT] Evidence for ${task.id} has files_changed=${changed.length} (min ${minFilesChanged})`);
+            state.phase = 'needs_review';
+            state.status = 'needs_review';
+            state.halt_reason = 'insufficient_evidence_files_changed';
+            return;
+          }
+
+          for (const file of changed) {
+            if (isExcluded(file)) {
+              console.error(`[HALT] Evidence for ${task.id} includes excluded path: ${file}`);
+              state.phase = 'needs_review';
+              state.status = 'needs_review';
+              state.halt_reason = 'evidence_includes_excluded_paths';
+              return;
+            }
+          }
+
+          // Ensure evidence stays within declared task.output (anti-implicit work).
+          validateEvidenceAgainstTask(task, evidence);
+          validateAcceptanceCriteria(task, runtimeConfig);
+        }
+      }
+
+      // Session counters + max_tasks_per_run enforcement across multiple `run`s.
+      ensureSessionBaseline(state, tasksDoc, command);
+
+      // Checkpointing: append bounded summaries to memory.md every N completed tasks.
+      if (shouldCreateCheckpoint(state)) {
+        createCheckpoint(state, tasksDoc.tasks);
+      }
+
+      // Refresh context snapshot each run (cheap, small).
+      writeContextSnapshot(state, tasksDoc);
+
+      if (!canExecuteMoreTasks(state)) {
+        console.log(`[HALT] ${state.halt_reason}`);
+        return;
+      }
+
+      // Completion detection is cheap: do it before proposing new work.
+      if (checkProjectCompletion(tasksDoc.tasks, state)) {
+        console.log('[DONE] All tasks are completed.');
+        saveTasks(tasksDoc);
+        return;
+      }
+
+      // Determine next parallel batch.
+      const maxBatch = state.parallel_batch.max_batch_size || 3;
+      const remainingQuota = Math.max(
+        0,
+        (state.execution_control.max_tasks_per_run || 5) - (state.execution_control.tasks_completed || 0)
+      );
+      const batchSize = Math.min(maxBatch, remainingQuota);
+
+      const batch = selectBatchForExecution(tasksDoc.tasks, batchSize);
+
+      if (batch.length === 0) {
+        console.log('[HALT] No executable tasks available (all pending tasks are blocked or none exist).');
+        state.phase = 'needs_review';
+        state.status = 'needs_review';
+        state.halt_reason = 'no_executable_tasks';
+        saveTasks(tasksDoc);
+        return;
+      }
+
+      console.log('\n🟢 BATCH PARALELO - Puedes ejecutar estas tareas en cualquier orden:\n');
+      batch.forEach(task => {
+        console.log(`  - ${task.id}: ${task.title || '(no title)'}`);
+        console.log(`    Skill: ${task.skill || '-'}`);
+        console.log(`    Input: ${(task.input || []).join(', ') || '-'}`);
+        console.log(`    Output: ${(task.output || []).join(', ') || '-'}`);
+        if (Array.isArray(task.depends_on) && task.depends_on.length > 0) {
+          console.log(`    Depends on: ${task.depends_on.join(', ')}`);
+        }
+        console.log('');
+      });
+
+      console.log('[NEXT] Ejecuta las tareas del batch, luego:');
+      console.log('  1) Marca cada tarea como `done` (o `failed`) en system/tasks.yaml');
+      if (requireEvidence) {
+        console.log('  2) Crea system/evidence/{task_id}.json con files_changed y summary');
+      }
+      console.log('  3) Vuelve a correr: node runner.js run');
+
+      state.iteration += 1;
+      state.halt_reason = 'batch_ready';
+
+      saveTasks(tasksDoc);
       
     } finally {
       // Always release lock
@@ -1018,6 +1532,234 @@ const main = async () => {
     console.log('[INFO] Implementation pending');
     return;
   }
+
+  if (command === 'plan') {
+    const state = loadState();
+    if (!state) {
+      console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
+      process.exit(1);
+    }
+
+    const runtimeConfig = loadRuntimeConfig();
+    applyRuntimeConfigToState(state, runtimeConfig);
+
+    const prompt = args.slice(1).join(' ').trim();
+    if (prompt) {
+      const existingGoal = readFile(GOAL_FILE) || '# Goal\n\n';
+      const normalized = existingGoal.includes('# Goal') ? existingGoal : `# Goal\n\n${existingGoal}\n`;
+      const updated = `${normalized.trim()}\n\n## Latest Request\n\n${prompt}\n`;
+      writeFile(GOAL_FILE, updated);
+    }
+
+    let tasksDoc = loadTasks();
+    if (!tasksDoc) {
+      tasksDoc = initializeTasks(state.run_id);
+    }
+    tasksDoc = normalizeTasksDoc(tasksDoc);
+
+    state.phase = 'planning';
+    state.status = 'running';
+    state.halt_reason = null;
+
+    writeContextSnapshot(state, tasksDoc);
+    const planRequest = buildPlanRequest(state, tasksDoc, runtimeConfig, prompt);
+    writeFile(PLAN_REQUEST_FILE, planRequest);
+
+    saveState(state);
+
+    console.log('[PLAN] Planner request created: system/plan_request.md');
+    console.log('[PLAN] Use your LLM/Planner to produce system/plan.md and system/tasks.yaml');
+    return;
+  }
+
+  if (command === 'validate') {
+    const state = loadState();
+    if (!state) {
+      console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
+      process.exit(1);
+    }
+    const runtimeConfig = loadRuntimeConfig();
+    const tasksDoc = normalizeTasksDoc(loadTasks());
+    try {
+      validatePlannedTasks(tasksDoc, runtimeConfig);
+    } catch (e) {
+      console.error(`[VALIDATE] Failed: ${e.message}`);
+      process.exit(1);
+    }
+    console.log('[VALIDATE] Planning checks passed');
+    return;
+  }
+
+  if (command === 'evidence') {
+    const state = loadState();
+    if (!state) {
+      console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
+      process.exit(1);
+    }
+    const runtimeConfig = loadRuntimeConfig();
+    const taskId = args[1];
+    if (!taskId) {
+      console.error('[ERROR] Missing task id. Usage: node runner.js evidence T1 [files...]');
+      process.exit(1);
+    }
+    const files = args.slice(2);
+    const filesChanged = files.length ? files : getGitDiffFiles();
+    const cleaned = createEvidenceForTask(taskId, filesChanged, 'Auto-generated evidence', runtimeConfig);
+    console.log(`[EVIDENCE] Saved system/evidence/${taskId}.json with ${cleaned.length} files`);
+    return;
+  }
+
+  if (command === 'verify') {
+    const state = loadState();
+    if (!state) {
+      console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
+      process.exit(1);
+    }
+    const runtimeConfig = loadRuntimeConfig();
+    const tasksDoc = normalizeTasksDoc(loadTasks());
+    const evidenceCfg = getEvidenceConfig(runtimeConfig);
+
+    const errors = [];
+    for (const task of tasksDoc.tasks) {
+      if (task.estado !== 'done') continue;
+
+      if (evidenceCfg.required) {
+        const evidence = loadEvidence(task.id);
+        if (!evidence) {
+          errors.push(`Missing evidence for ${task.id}`);
+          continue;
+        }
+        const changed = Array.isArray(evidence.files_changed) ? evidence.files_changed : [];
+        const cleaned = filterExcludedPaths(changed, evidenceCfg.excluded_paths);
+        if (cleaned.length < evidenceCfg.min_files_changed) {
+          errors.push(`Evidence for ${task.id} has files_changed=${cleaned.length} (min ${evidenceCfg.min_files_changed})`);
+          continue;
+        }
+        try {
+          validateEvidenceAgainstTask(task, evidence);
+        } catch (e) {
+          errors.push(e.message);
+          continue;
+        }
+      }
+
+      try {
+        validateAcceptanceCriteria(task, runtimeConfig);
+      } catch (e) {
+        errors.push(e.message);
+      }
+    }
+
+    if (errors.length > 0) {
+      console.error('[VERIFY] Failed:');
+      errors.forEach(err => console.error(`- ${err}`));
+      process.exit(1);
+    }
+
+    console.log('[VERIFY] All done tasks validated');
+    return;
+  }
+
+  if (command === 'done') {
+    const state = loadState();
+    if (!state) {
+      console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
+      process.exit(1);
+    }
+    const runtimeConfig = loadRuntimeConfig();
+    const taskId = args[1];
+    if (!taskId) {
+      console.error('[ERROR] Missing task id. Usage: node runner.js done T1 [files...]');
+      process.exit(1);
+    }
+    const tasksDoc = normalizeTasksDoc(loadTasks());
+    const task = markTaskDone(tasksDoc, taskId);
+    if (!task) {
+      console.error(`[ERROR] Task not found: ${taskId}`);
+      process.exit(1);
+    }
+    onTaskSuccess(state);
+    saveTasks(tasksDoc);
+    saveState(state);
+
+    if (getEvidenceConfig(runtimeConfig).required) {
+      const files = args.slice(2);
+      const filesChanged = files.length ? files : getGitDiffFiles();
+      createEvidenceForTask(taskId, filesChanged, 'Auto-generated evidence', runtimeConfig);
+      console.log(`[DONE] Task ${taskId} marked done + evidence saved`);
+      return;
+    }
+
+    console.log(`[DONE] Task ${taskId} marked done`);
+    return;
+  }
+
+  if (command === 'fail') {
+    const state = loadState();
+    if (!state) {
+      console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
+      process.exit(1);
+    }
+    const tasksDoc = normalizeTasksDoc(loadTasks());
+    const taskId = args[1];
+    if (!taskId) {
+      console.error('[ERROR] Missing task id. Usage: node runner.js fail T1 "reason"');
+      process.exit(1);
+    }
+    const reason = args.slice(2).join(' ').trim();
+    const task = markTaskFailed(tasksDoc, taskId, reason);
+    if (!task) {
+      console.error(`[ERROR] Task not found: ${taskId}`);
+      process.exit(1);
+    }
+    const result = processTaskFailure(tasksDoc, taskId, state);
+    saveTasks(tasksDoc);
+    saveState(state);
+    console.log(`[FAIL] ${result.message}`);
+    if (result.blocked_dependents && result.blocked_dependents.length) {
+      console.log(`[FAIL] Blocked dependents: ${result.blocked_dependents.join(', ')}`);
+    }
+    return;
+  }
+
+  if (command === 'retry') {
+    const state = loadState();
+    if (!state) {
+      console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
+      process.exit(1);
+    }
+    const tasksDoc = normalizeTasksDoc(loadTasks());
+    const taskId = args[1];
+    if (!taskId) {
+      console.error('[ERROR] Missing task id. Usage: node runner.js retry T1');
+      process.exit(1);
+    }
+    const task = markTaskPending(tasksDoc, taskId);
+    if (!task) {
+      console.error(`[ERROR] Task not found: ${taskId}`);
+      process.exit(1);
+    }
+    if (task.error === 'failed_permanent') {
+      console.error(`[ERROR] Task ${taskId} is failed_permanent and cannot be retried`);
+      process.exit(1);
+    }
+    saveTasks(tasksDoc);
+    saveState(state);
+    console.log(`[RETRY] Task ${taskId} moved back to pending`);
+    return;
+  }
+
+  if (command === 'context') {
+    const state = loadState();
+    if (!state) {
+      console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
+      process.exit(1);
+    }
+    const tasksDoc = normalizeTasksDoc(loadTasks());
+    writeContextSnapshot(state, tasksDoc);
+    console.log('[CONTEXT] Snapshot updated in system/context.md');
+    return;
+  }
   
   // Default: show help
   console.log('Usage: node runner.js [command]');
@@ -1028,6 +1770,14 @@ const main = async () => {
   console.log('  resume         Resume from paused state');
   console.log('  status         Show current state');
   console.log('  review         Manual review mode');
+  console.log('  plan "prompt"  Create planner request (context + goal)');
+  console.log('  validate       Validate tasks.yaml against config');
+  console.log('  done T1 [files...]   Mark task done (+ auto evidence)');
+  console.log('  fail T1 "reason"     Mark task failed');
+  console.log('  retry T1             Move task back to pending');
+  console.log('  evidence T1 [files...]  Write evidence for task');
+  console.log('  verify               Validate evidence for done tasks');
+  console.log('  context        Refresh context snapshot');
   console.log('');
 };
 

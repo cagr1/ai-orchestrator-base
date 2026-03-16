@@ -7,11 +7,22 @@ Sistema multi-agente **determinístico y paralelo** donde agentes especializados
 ## ✨ Características v3.0
 
 - **🔄 Ejecución Paralela**: Selección declarativa de batches (hasta 3 tareas simultáneas)
-- **🛡️ Anti-Hallucination**: Validación R10 (evidencia vs task.output) reduce alucinaciones ~70%
+- **🛡️ Anti-Hallucination**: Validación R10 (evidencia vs `task.output`) reduce cambios implícitos/no autorizados
 - **⚡ Protección Fatiga LLM**: Cooldown tras 3 fallos consecutivos, max 5 tareas por ejecución
 - **🔒 Run Lock + TTL**: Previene ejecución concurrente y bloqueos permanentes
 - **📊 Determinístico**: Mismo tasks.yaml → mismo batch siempre (priority + id)
 - **🧪 30+ Tests**: Validación invariante sin frameworks pesados
+
+---
+
+## 🔌 Agnóstico por Diseño
+
+Este repo no depende de un proveedor de LLM. El contrato del sistema es:
+- `system/tasks.yaml` como interfaz (qué hay que hacer y qué archivos se permiten tocar).
+- `skills/` y `agents/*.md` como prompts reutilizables (puedes usarlos con Codex, ChatGPT, Kilo, etc.).
+- `runner.js` como orquestador determinístico que valida reglas y propone el siguiente batch.
+
+Lo intencionalmente "no agnóstico" son tus *skills* (tu conocimiento codificado). Puedes llevarte el runner a otro repo y cambiar la librería de skills sin tocar el core.
 
 ---
 
@@ -26,10 +37,13 @@ ai-orchestrator-base/
 ├── system/                # Estado y configuración del sistema
 │   ├── goal.md            # Prompt inicial del usuario (inmutable)
 │   ├── plan.md            # Plan estructurado en fases
+│   ├── plan_request.md    # Solicitud de planner (contexto barato)
 │   ├── tasks.yaml         # Tareas con input/output (YAML v3.0)
 │   ├── state.json         # Control de ejecución (mínimo)
 │   ├── memory.md          # Decisiones técnicas (append-only)
-│   └── config.json        # Configuración de límites
+│   ├── context.md         # Resumen corto del estado (cheap context)
+│   ├── config.json        # Configuración de límites
+│   └── evidence/          # Evidencias de ejecución (task_id.json)
 ├── agents/                # Definición de agentes
 │   ├── planner.md         # Genera tasks.yaml desde goal
 │   ├── executor.md        # Ejecuta tareas usando skills
@@ -46,7 +60,6 @@ ai-orchestrator-base/
 │   ├── architecture/
 │   ├── cognitive/
 │   └── classifier/
-├── evidence/              # Evidencias de ejecución (task_id.json)
 └── tests/                 # Tests invariantes
     ├── run-all.js
     ├── phase1_state.test.js
@@ -65,6 +78,9 @@ ai-orchestrator-base/
 ## 🚀 Comandos CLI
 
 ```bash
+# Instalar dependencias
+npm ci
+
 # Inicializar nuevo proyecto
 node runner.js init "Descripción del proyecto"
 
@@ -82,6 +98,30 @@ node runner.js review
 
 # Ejecutar tests
 npm test
+
+# Refrescar snapshot de contexto
+node runner.js context
+
+# Crear solicitud de planner (usa goal + context)
+node runner.js plan "Tu solicitud"
+
+# Validar tasks.yaml contra config
+node runner.js validate
+
+# Marcar tarea como done (auto evidencia si hay git diff)
+node runner.js done T1
+
+# Marcar tarea como fail
+node runner.js fail T1 "motivo"
+
+# Reintentar tarea
+node runner.js retry T1
+
+# Validar evidencias
+node runner.js verify
+
+# Crear evidencia manual/auto
+node runner.js evidence T1 src/file.js
 ```
 
 ---
@@ -204,7 +244,7 @@ graph TD
 ### R10: Sin Tareas Implícitas (Anti-Hallucination)
 - Executor SOLO puede crear/modificar archivos en `task.output`
 - Evidencia validada contra output permitido
-- Reduce alucinaciones ~70%
+- Reduce cambios implícitos/no autorizados (y obliga a explicitar qué se tocó)
 
 ### R11: Protección del Planner (Anti-Destrucción)
 - Planner solo puede ejecutar si:
@@ -279,7 +319,7 @@ $ node runner.js resume
 
 ## 🔧 Configuración
 
-Editar `system/config.json`:
+El runner lee `system/config.json`. Soporta un bloque `limits` (opcional) para ajustar topes, y `evidence` para enforcement.
 
 ```json
 {
@@ -319,7 +359,7 @@ Editar `system/config.json`:
 - [x] State.json mínimo (run_id, iteration, status, execution_control, lock)
 - [x] Run Lock previene ejecución concurrente
 - [x] Hasta 5 tareas por ejecución
-- [x] Contadores resetean en `run` o `resume`
+- [x] Contadores de sesión resetean en `resume` (y al iniciar un run nuevo)
 - [x] Batch selection recalculado cada ejecución
 - [x] max_iterations = 50 detiene ejecución
 - [x] Sin while loops - ejecución single-round
