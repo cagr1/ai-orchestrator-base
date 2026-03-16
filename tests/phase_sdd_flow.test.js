@@ -16,7 +16,9 @@ const filesToBackup = [
   'state.json',
   'config.json',
   'memory.md',
-  'context.md'
+  'context.md',
+  'status.md',
+  'events.log'
 ];
 
 function readIfExists(filePath) {

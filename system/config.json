@@ -193,7 +193,8 @@
     "min_pass_score": 7,
     "require_tests": true,
     "require_types": true,
-    "require_error_handling": true
+    "require_error_handling": true,
+    "require_acceptance_criteria": false
   },
   
   "complexity_levels": {
@@ -206,5 +207,10 @@
   "memory": {
     "max_entries": 20,
     "enable_compaction": true
+  },
+
+  "context": {
+    "max_lines": 120,
+    "working_set_limit": 10
   }
 }

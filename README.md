@@ -42,6 +42,8 @@ ai-orchestrator-base/
 │   ├── state.json         # Control de ejecución (mínimo)
 │   ├── memory.md          # Decisiones técnicas (append-only)
 │   ├── context.md         # Resumen corto del estado (cheap context)
+│   ├── status.md          # Dashboard compacto (progreso, riesgos)
+│   └── events.log         # Auditoría de eventos
 │   ├── config.json        # Configuración de límites
 │   └── evidence/          # Evidencias de ejecución (task_id.json)
 ├── agents/                # Definición de agentes

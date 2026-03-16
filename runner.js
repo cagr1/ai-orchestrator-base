@@ -21,6 +21,8 @@ const STATE_FILE = path.join(SYSTEM_DIR, 'state.json');
 const CONFIG_FILE = path.join(SYSTEM_DIR, 'config.json');
 const CONTEXT_FILE = path.join(SYSTEM_DIR, 'context.md');
 const PLAN_REQUEST_FILE = path.join(SYSTEM_DIR, 'plan_request.md');
+const EVENTS_FILE = path.join(SYSTEM_DIR, 'events.log');
+const STATUS_FILE = path.join(SYSTEM_DIR, 'status.md');
 
 // ============================================================
 // FILE OPERATIONS
@@ -68,6 +70,15 @@ const ensureDir = (dirPath) => {
 };
 
 const nowIso = () => new Date().toISOString();
+
+const appendEvent = (type, data = {}) => {
+  const kv = Object.entries(data)
+    .map(([k, v]) => `${k}=${String(v).replace(/\s+/g, '_')}`)
+    .join(' ');
+  const line = `${nowIso()} | ${type}${kv ? ' | ' + kv : ''}\n`;
+  const existing = readFile(EVENTS_FILE) || '';
+  writeFile(EVENTS_FILE, existing + line);
+};
 
 // ============================================================
 // CONTEXT SNAPSHOT (Cheap Memory Layer)
@@ -171,6 +182,87 @@ const summarizeSkills = (config) => {
     const suffix = list.length > 6 ? ` (+${list.length - 6} more)` : '';
     return `${tier}: ${preview}${suffix}`;
   });
+};
+
+const computeLongestDependencyChain = (tasks) => {
+  const graph = {};
+  tasks.forEach(t => {
+    graph[t.id] = t.depends_on || [];
+  });
+  const memo = new Map();
+
+  const dfs = (node) => {
+    if (memo.has(node)) return memo.get(node);
+    const deps = graph[node] || [];
+    if (deps.length === 0) {
+      memo.set(node, 1);
+      return 1;
+    }
+    const depth = 1 + Math.max(...deps.map(d => dfs(d)));
+    memo.set(node, depth);
+    return depth;
+  };
+
+  return Math.max(0, ...Object.keys(graph).map(dfs));
+};
+
+const countSpecCoverage = (tasks) => {
+  if (!tasks.length) return { total: 0, withSpec: 0, pct: 0 };
+  const withSpec = tasks.filter(t => {
+    if (Array.isArray(t.spec_ref) && t.spec_ref.length > 0) return true;
+    if (typeof t.spec_ref === 'string' && t.spec_ref.trim()) return true;
+    if (Array.isArray(t.spec_refs) && t.spec_refs.length > 0) return true;
+    return false;
+  }).length;
+  const pct = Math.round((withSpec / tasks.length) * 100);
+  return { total: tasks.length, withSpec, pct };
+};
+
+const collectRiskFlags = (tasks) => {
+  const flagged = tasks.filter(t => Array.isArray(t.risk_flags) && t.risk_flags.length > 0);
+  return flagged.map(t => `${t.id}: ${t.risk_flags.join(', ')}`);
+};
+
+const writeStatusDashboard = (state, tasksDoc) => {
+  const tasks = tasksDoc?.tasks || [];
+  const meta = tasksDoc?.metadata || {};
+  const longest = computeLongestDependencyChain(tasks);
+  const spec = countSpecCoverage(tasks);
+  const risks = collectRiskFlags(tasks);
+  const pending = getTopPendingTasks(tasksDoc, 8);
+
+  const lines = [
+    '# Status Dashboard',
+    '',
+    `Updated: ${nowIso()}`,
+    `Run ID: ${state.run_id || '-'}`,
+    `Phase: ${state.phase || '-'}`,
+    `Iteration: ${state.iteration}/${state.max_iterations}`,
+    `Status: ${state.status || '-'}`,
+    `Halt Reason: ${state.halt_reason || '-'}`,
+    '',
+    '## Task Summary',
+    `- total: ${meta.total_tasks || 0}`,
+    `- completed: ${meta.completed || 0}`,
+    `- pending: ${meta.pending || 0}`,
+    `- failed: ${meta.failed || 0}`,
+    `- blocked: ${meta.blocked || 0}`,
+    '',
+    '## Dependency Health',
+    `- longest_chain: ${longest}`,
+    '',
+    '## Spec Coverage',
+    `- with_spec: ${spec.withSpec}/${spec.total} (${spec.pct}%)`,
+    '',
+    '## Top Pending Tasks',
+    ...(pending.length ? pending.map(p => `- ${p}`) : ['- (none)']),
+    '',
+    '## Risk Flags',
+    ...(risks.length ? risks.map(r => `- ${r}`) : ['- (none)']),
+    ''
+  ];
+
+  writeFile(STATUS_FILE, lines.join('\n'));
 };
 
 const buildPlanRequest = (state, tasksDoc, config, newPrompt) => {
@@ -1339,6 +1431,8 @@ const main = async () => {
     initializeTasks(state.run_id);
     // Initialize a cheap context snapshot for future runs.
     writeContextSnapshot(state, loadTasks());
+    writeStatusDashboard(state, loadTasks());
+    appendEvent('init', { run_id: state.run_id });
     
     console.log(`[INIT] New run initialized: ${state.run_id}`);
     console.log('[INIT] Phase: planning');
@@ -1371,6 +1465,7 @@ const main = async () => {
       console.log(`[${command.toUpperCase()}] Starting execution...`);
       console.log(`[STATE] Phase: ${state.phase}`);
       console.log(`[STATE] Iteration: ${state.iteration}/${state.max_iterations}`);
+      appendEvent('run_start', { run_id: state.run_id, phase: state.phase, iteration: state.iteration });
 
       if (command === 'run' && state.status === 'paused') {
         console.error('[HALT] State is paused. Run: node runner.js resume');
@@ -1460,6 +1555,7 @@ const main = async () => {
 
       // Refresh context snapshot each run (cheap, small).
       writeContextSnapshot(state, tasksDoc);
+      writeStatusDashboard(state, tasksDoc);
 
       if (!canExecuteMoreTasks(state)) {
         console.log(`[HALT] ${state.halt_reason}`);
@@ -1515,11 +1611,13 @@ const main = async () => {
       state.halt_reason = 'batch_ready';
 
       saveTasks(tasksDoc);
+      appendEvent('batch_ready', { run_id: state.run_id, batch_size: batch.length });
       
     } finally {
       // Always release lock
       releaseLock(state);
       saveState(state);
+      appendEvent('run_end', { run_id: state.run_id, status: state.status });
     }
     
     console.log('\n[END] Runner finished\n');
@@ -1562,10 +1660,12 @@ const main = async () => {
     state.halt_reason = null;
 
     writeContextSnapshot(state, tasksDoc);
+    writeStatusDashboard(state, tasksDoc);
     const planRequest = buildPlanRequest(state, tasksDoc, runtimeConfig, prompt);
     writeFile(PLAN_REQUEST_FILE, planRequest);
 
     saveState(state);
+    appendEvent('plan_request', { run_id: state.run_id });
 
     console.log('[PLAN] Planner request created: system/plan_request.md');
     console.log('[PLAN] Use your LLM/Planner to produce system/plan.md and system/tasks.yaml');
@@ -1587,6 +1687,7 @@ const main = async () => {
       process.exit(1);
     }
     console.log('[VALIDATE] Planning checks passed');
+    appendEvent('validate', { run_id: state.run_id });
     return;
   }
 
@@ -1606,6 +1707,7 @@ const main = async () => {
     const filesChanged = files.length ? files : getGitDiffFiles();
     const cleaned = createEvidenceForTask(taskId, filesChanged, 'Auto-generated evidence', runtimeConfig);
     console.log(`[EVIDENCE] Saved system/evidence/${taskId}.json with ${cleaned.length} files`);
+    appendEvent('evidence', { task: taskId, files: cleaned.length });
     return;
   }
 
@@ -1657,6 +1759,7 @@ const main = async () => {
     }
 
     console.log('[VERIFY] All done tasks validated');
+    appendEvent('verify', { run_id: state.run_id });
     return;
   }
 
@@ -1681,16 +1784,19 @@ const main = async () => {
     onTaskSuccess(state);
     saveTasks(tasksDoc);
     saveState(state);
+    writeStatusDashboard(state, tasksDoc);
 
     if (getEvidenceConfig(runtimeConfig).required) {
       const files = args.slice(2);
       const filesChanged = files.length ? files : getGitDiffFiles();
       createEvidenceForTask(taskId, filesChanged, 'Auto-generated evidence', runtimeConfig);
       console.log(`[DONE] Task ${taskId} marked done + evidence saved`);
+      appendEvent('done', { task: taskId, evidence: 'auto' });
       return;
     }
 
     console.log(`[DONE] Task ${taskId} marked done`);
+    appendEvent('done', { task: taskId });
     return;
   }
 
@@ -1715,10 +1821,12 @@ const main = async () => {
     const result = processTaskFailure(tasksDoc, taskId, state);
     saveTasks(tasksDoc);
     saveState(state);
+    writeStatusDashboard(state, tasksDoc);
     console.log(`[FAIL] ${result.message}`);
     if (result.blocked_dependents && result.blocked_dependents.length) {
       console.log(`[FAIL] Blocked dependents: ${result.blocked_dependents.join(', ')}`);
     }
+    appendEvent('fail', { task: taskId, action: result.action });
     return;
   }
 
@@ -1745,7 +1853,9 @@ const main = async () => {
     }
     saveTasks(tasksDoc);
     saveState(state);
+    writeStatusDashboard(state, tasksDoc);
     console.log(`[RETRY] Task ${taskId} moved back to pending`);
+    appendEvent('retry', { task: taskId });
     return;
   }
 
@@ -1757,7 +1867,9 @@ const main = async () => {
     }
     const tasksDoc = normalizeTasksDoc(loadTasks());
     writeContextSnapshot(state, tasksDoc);
+    writeStatusDashboard(state, tasksDoc);
     console.log('[CONTEXT] Snapshot updated in system/context.md');
+    appendEvent('context', { run_id: state.run_id });
     return;
   }
   
@@ -1778,6 +1890,7 @@ const main = async () => {
   console.log('  evidence T1 [files...]  Write evidence for task');
   console.log('  verify               Validate evidence for done tasks');
   console.log('  context        Refresh context snapshot');
+  console.log('  status.md / events.log auto-updated during runs');
   console.log('');
 };
 

@@ -121,6 +121,11 @@ Genera/actualiza `system/context.md` con un resumen corto del estado (goal, tare
 
 ---
 
+## 📊 Dashboard y Auditoría
+
+- `system/status.md`: resumen de progreso, riesgos y salud de dependencias.
+- `system/events.log`: bitácora de eventos (init, run, done, fail, verify).
+
 ### `review` - Modo Revisión
 
 ```bash
