@@ -5,7 +5,8 @@ This document explains the internal architecture, data flow, invariants, and ext
 ## 1) System Architecture
 
 **Core components**
-- `runner.js`: orchestration engine (deterministic batch selection + validation + audit)
+- `runner.js`: orchestration engine (deterministic batch selection + validation + audit + LLM execution)
+- `providers/openrouter.js`: OpenRouter API integration for LLM calls
 - `system/`: run state, plans, tasks, evidence, context, and dashboards
 - `skills/`: reusable skill prompts (domain knowledge)
 - `agents/`: role definitions (planner/executor/qa/reviewer) + prompt scaffolds
@@ -13,6 +14,29 @@ This document explains the internal architecture, data flow, invariants, and ext
 
 **Key design principle**
 - Task state lives **only** in `system/tasks.yaml`. `system/state.json` is execution control only.
+- LLM execution is optional and controlled by `AUTO_EXECUTE` flag and API key availability.
+
+## 1.1) LLM Integration Architecture
+
+**Provider System**
+- `providers/openrouter.js`: Bridge to OpenRouter API
+- Model selection based on task skill via `model_mapping` in config
+- Supports multiple model tiers (free, low-cost, premium)
+
+**Execution Flow with LLM**
+1. Task selected from batch
+2. Prompt built with `buildExecutionPrompt(task)`
+3. Model selected based on `task.skill` → `model_mapping` → `providers.models`
+4. LLM called with structured prompt (JSON-only output)
+5. Response parsed and validated
+6. Files written to disk
+7. Task marked as done, evidence created
+
+**Error Handling**
+- Invalid JSON: attempts extraction with regex fallback
+- Missing API key: graceful error message
+- API errors: logged with full response text
+- Task failures: marked in tasks.yaml, evidence not created
 
 ## 2) Execution Flow
 
@@ -26,13 +50,19 @@ This document explains the internal architecture, data flow, invariants, and ext
 2. Writes `system/plan_request.md` (goal + context + tasks + skills summary)
 3. Planner/LLM updates `system/plan.md` and `system/tasks.yaml`
 
-**Run**
+**Run (with LLM)**
 1. `node runner.js run`
 2. Validates tasks (schema + skills + R9 + deps + cycles)
 3. Recalculates blocked/pending from dependencies
 4. Validates evidence for done tasks (R10)
 5. Selects deterministic batch (priority then id)
-6. Writes context + status + run history
+6. **If API key present**: executes tasks with LLM
+   - Calls OpenRouter with selected model
+   - Parses JSON response
+   - Writes files to disk
+   - Updates tasks.yaml
+   - Creates evidence
+7. Writes context + status + run history
 
 ## 3) Files and Their Roles
 

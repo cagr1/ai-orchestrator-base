@@ -1,3 +1,3 @@
 # Goal
 
-Define project goal here
+Crear landing page para startup SaaS con dashboard y autenticación

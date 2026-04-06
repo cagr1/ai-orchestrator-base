@@ -2,6 +2,8 @@
 
 Sistema multi-agente **determinístico y paralelo** donde agentes especializados interactúan entre sí para desarrollar proyectos de software de forma automatizada, con protección contra fatiga de LLM y recuperación ante fallos.
 
+**Actualización v3.0.1**: Ahora con ejecución real de tareas usando LLM, generación de código y escritura automática de archivos.
+
 ---
 
 ## ✨ Características v3.0
@@ -12,6 +14,9 @@ Sistema multi-agente **determinístico y paralelo** donde agentes especializados
 - **🔒 Run Lock + TTL**: Previene ejecución concurrente y bloqueos permanentes
 - **📊 Determinístico**: Mismo tasks.yaml → mismo batch siempre (priority + id)
 - **🧪 30+ Tests**: Validación invariante sin frameworks pesados
+- **🤖 Ejecución Real con LLM**: Integración con OpenRouter para generación automática de código
+- **📝 Escritura de Archivos**: Parseo automático de JSON y creación de archivos en disco
+- **🎯 Modelos Inteligentes**: Selección automática de modelo según tipo de tarea (free, low-cost, premium)
 
 ---
 
@@ -21,8 +26,28 @@ Este repo no depende de un proveedor de LLM. El contrato del sistema es:
 - `system/tasks.yaml` como interfaz (qué hay que hacer y qué archivos se permiten tocar).
 - `skills/` y `agents/*.md` como prompts reutilizables (puedes usarlos con Codex, ChatGPT, Kilo, etc.).
 - `runner.js` como orquestador determinístico que valida reglas y propone el siguiente batch.
+- `providers/openrouter.js` como bridge para ejecutar tareas con LLM real.
 
 Lo intencionalmente "no agnóstico" son tus *skills* (tu conocimiento codificado). Puedes llevarte el runner a otro repo y cambiar la librería de skills sin tocar el core.
+
+### Integración con OpenRouter
+
+El sistema ahora incluye ejecución automática usando OpenRouter:
+
+```bash
+# Configurar API key
+echo "OPENROUTER_API_KEY=tu-key" > .env
+
+# Ejecutar tareas automáticamente
+node runner.js run
+```
+
+El sistema selecciona el modelo óptimo según el skill de la tarea:
+- **Free**: minimax-m2.5, qwen3.6-plus, step-3.5-flash
+- **Low-cost**: deepseek-v3.2, grok-4.1-fast, kimi-k2.5, qwen3-coder-next
+- **Premium**: claude-opus-4.6, gpt-5.3-codex
+
+---
 
 ---
 
@@ -31,7 +56,8 @@ Lo intencionalmente "no agnóstico" son tus *skills* (tu conocimiento codificado
 ```
 ai-orchestrator-base/
 ├── runner.js              # Entry point - Orquestador determinístico
-├── package.json           # Dependencias (js-yaml)
+├── package.json           # Dependencias (js-yaml, dotenv)
+├── .env                   # Variables de entorno (API keys)
 ├── README.md              # Este archivo
 ├── USAGE.md               # Guía completa de uso
 ├── system/                # Estado y configuración del sistema
@@ -43,14 +69,16 @@ ai-orchestrator-base/
 │   ├── memory.md          # Decisiones técnicas (append-only)
 │   ├── context.md         # Resumen corto del estado (cheap context)
 │   ├── status.md          # Dashboard compacto (progreso, riesgos)
+│   ├── config.json        # Configuración de límites y modelos
 │   └── events.log         # Auditoría de eventos
 │   └── runs/              # Historial por ejecución (gitignored)
 │   ├── skills_index.json  # Índice de skills (generado)
 │   ├── provider.json      # Proveedor activo (generado)
 │   ├── cost.json          # Presupuesto y gasto (generado)
 │   └── splits/            # Sugerencias de split (generado)
-│   ├── config.json        # Configuración de límites
 │   └── evidence/          # Evidencias de ejecución (task_id.json)
+├── providers/             # Integraciones con proveedores LLM
+│   └── openrouter.js      # Bridge para OpenRouter API
 ├── agents/                # Definición de agentes
 │   ├── planner.md         # Genera tasks.yaml desde goal
 │   ├── executor.md        # Ejecuta tareas usando skills
@@ -92,10 +120,13 @@ ai-orchestrator-base/
 # Instalar dependencias
 npm ci
 
+# Configurar API key para ejecución automática
+echo "OPENROUTER_API_KEY=tu-key" > .env
+
 # Inicializar nuevo proyecto
 node runner.js init "Descripción del proyecto"
 
-# Ejecutar una ronda (hasta 5 tareas)
+# Ejecutar una ronda (hasta 5 tareas, con LLM si hay API key)
 node runner.js run
 
 # Reanudar desde estado pausado
@@ -128,7 +159,7 @@ node runner.js split T1
 
 # Seleccionar proveedor
 node runner.js provider list
-node runner.js provider use kilo
+node runner.js provider use openrouter
 
 # Presupuesto y gasto
 node runner.js cost set 50
@@ -151,6 +182,15 @@ node runner.js evidence T1 src/file.js
 ```
 
 Nota: `tasks.yaml` se guarda con orden determinístico y bloqueos optimistas para evitar colisiones entre ediciones paralelas.
+
+### Ejecución Automática con LLM
+
+Cuando hay una API key de OpenRouter configurada, el sistema:
+1. Selecciona el modelo óptimo según el skill de la tarea
+2. Genera el código automáticamente
+3. Escribe los archivos en disco
+4. Actualiza tasks.yaml con el estado
+5. Crea evidencia automática
 
 ---
 
@@ -234,11 +274,13 @@ npm test
 - Evidencia automática y validación estricta (R10 + verify).
 - Concurrencia segura con lock optimista en `tasks.yaml`.
 - Contexto barato (`context.md`) para reducir costos de lectura.
+- **Ejecución automática con LLM**: Integración con OpenRouter para generación de código.
+- **Escritura de archivos**: Parseo automático de JSON y creación de archivos en disco.
+- **Selección inteligente de modelos**: Configuración por skill para optimizar costo/calidad.
 
 **Limitaciones actuales:**
-- No ejecuta tareas por sí solo: requiere LLM/Planner o humano para escribir `plan.md` y `tasks.yaml`.
 - La evidencia automática depende de `git diff --name-only` (si no hay git o no hay diff, requiere archivos explícitos).
-- Proveedores y costo son estado local (no conectan con APIs todavía).
+- Proveedores y costo son estado local (no conectan con APIs de billing todavía).
 
 **Listo para pruebas fuertes:**
 - Sí, a nivel de orquestación, validaciones y flujos SDD, con tests pasando.
@@ -450,10 +492,25 @@ El runner lee `system/config.json`. Soporta un bloque `limits` (opcional) para a
 - [x] R11: Guardrail del Planner
 - [x] Tests invariantes para todas las fases críticas
 - [x] `npm test` pasa antes de commit
+- [x] **Ejecución automática con LLM** (v3.0.1)
+- [x] **Escritura de archivos en disco** (v3.0.1)
+- [x] **Configuración de modelos por skill** (v3.0.1)
+- [x] **Evidencia automática con metadata** (v3.0.1)
 
 ---
 
 ## 📝 Changelog
+
+### v3.0.1 - LLM Execution (2026-04-06)
+- **Ejecución Real con LLM**: Integración con OpenRouter para ejecutar tareas automáticamente
+- **Escritura de Archivos**: Parseo automático de JSON y creación de archivos en disco
+- **Configuración de Modelos**: Sistema de mapeo de skills a modelos (free, low-cost, premium)
+- **Evidencia Automática**: Creación de evidence files con metadata de ejecución
+- **dotenv Support**: Carga de API keys desde archivo .env
+- **Nuevos Modelos**:
+  - Free: minimax-m2.5, qwen3.6-plus, step-3.5-flash
+  - Low-cost: deepseek-v3.2, grok-4.1-fast, kimi-k2.5, qwen3-coder-next
+  - Premium: claude-opus-4.6, gpt-5.3-codex
 
 ### v3.1 - Improvements (2026-03-06)
 - **Mejora 1**: Tareas correctivas - Soporte para T5 → T5_fix sin mutar originales

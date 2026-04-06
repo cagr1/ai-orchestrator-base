@@ -6,11 +6,13 @@
  * Phase 1: Simplified state.json with Run Lock + TTL
  */
 
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const { execSync } = require('child_process');
 const crypto = require('crypto');
+const callOpenRouter = require('./providers/openrouter');
 
 const ROOT_DIR = __dirname;
 const SYSTEM_DIR = path.join(ROOT_DIR, 'system');
@@ -27,6 +29,7 @@ const STATUS_FILE = path.join(SYSTEM_DIR, 'status.md');
 const RUNS_DIR = path.join(SYSTEM_DIR, 'runs');
 const COST_FILE = path.join(SYSTEM_DIR, 'cost.json');
 const PROVIDER_FILE = path.join(SYSTEM_DIR, 'provider.json');
+const AUTO_EXECUTE = true;
 const SKILLS_INDEX_FILE = path.join(SYSTEM_DIR, 'skills_index.json');
 const SPLITS_DIR = path.join(SYSTEM_DIR, 'splits');
 
@@ -493,6 +496,60 @@ const buildPlanRequest = (state, tasksDoc, config, newPrompt) => {
   ];
 
   return lines.join('\n');
+};
+
+const buildExecutionPrompt = (task) => {
+  const outputs = Array.isArray(task.output) ? task.output.filter(Boolean) : [];
+  return [
+    'You are a senior software engineer.',
+    'Return ONLY valid JSON. No explanations.',
+    '',
+    '{',
+    '  "files": [',
+    '    {',
+    '      "path": "relative/path/file.ext",',
+    '      "content": "full file content"',
+    '    }',
+    '  ]',
+    '}',
+    '',
+    'Task Title:',
+    task.title || '(no title)',
+    '',
+    'Task Description:',
+    task.description || '(no description)',
+    '',
+    'You MUST only write files inside:',
+    outputs.length ? outputs.join(', ') : '(none)',
+    '',
+    'If you need multiple files, include all of them.',
+    'Do not include any text outside JSON.'
+  ].join('\n');
+};
+
+const runLLM = async (prompt, skill = null) => {
+  const config = readJSON(CONFIG_FILE);
+  const providerConfig = config.providers?.[config.active_provider];
+  
+  if (!providerConfig) {
+    throw new Error(`Provider ${config.active_provider} not configured`);
+  }
+  
+  if (providerConfig.type === 'openrouter') {
+    // Determine model based on skill
+    const modelMapping = config.model_mapping || {};
+    const modelKey = modelMapping[skill] || modelMapping.default || 'free_default';
+    const model = providerConfig.models?.[modelKey];
+    
+    if (!model) {
+      throw new Error(`Model ${modelKey} not configured for provider ${config.active_provider}`);
+    }
+    
+    const result = await callOpenRouter(prompt, model);
+    return result;
+  }
+  
+  throw new Error(`Unsupported provider type: ${providerConfig.type}`);
 };
 
 // ============================================================
@@ -1913,6 +1970,90 @@ const main = async () => {
         }
         console.log('');
       });
+
+if (AUTO_EXECUTE) {
+        let anyTaskUpdated = false;
+        
+        for (const task of batch) {
+          try {
+            console.log(`[EXEC] Running task ${task.id}`);
+            const prompt = buildExecutionPrompt(task);
+            const llmOutput = await runLLM(prompt, task.skill);
+            
+            // Parse JSON output
+            let parsed;
+            try {
+              parsed = JSON.parse(llmOutput);
+            } catch (parseErr) {
+              // Try to extract JSON if there's extra text
+              const jsonMatch = llmOutput.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                parsed = JSON.parse(jsonMatch[0]);
+              } else {
+                throw new Error(`Invalid JSON output: ${llmOutput.slice(0, 100)}...`);
+              }
+            }
+            
+            // Validate structure
+            if (!parsed.files || !Array.isArray(parsed.files)) {
+              throw new Error('Output missing files array');
+            }
+            
+            // Write files
+            const ROOT_DIR = __dirname;
+            for (const file of parsed.files) {
+              if (!file.path || !file.content) {
+                console.warn(`[EXEC WARN] ${task.id}: Skipping invalid file entry`);
+                continue;
+              }
+              
+              // Ensure output path is within allowed outputs
+              const outputPaths = Array.isArray(task.output) ? task.output : [];
+              if (outputPaths.length > 0 && !outputPaths.includes(file.path)) {
+                console.warn(`[EXEC WARN] ${task.id}: File ${file.path} not in allowed outputs ${outputPaths.join(', ')}`);
+              }
+              
+              const filePath = path.join(ROOT_DIR, file.path);
+              fs.mkdirSync(path.dirname(filePath), { recursive: true });
+              fs.writeFileSync(filePath, file.content, 'utf-8');
+              console.log(`[EXEC WRITE] ${task.id}: Created ${file.path}`);
+            }
+            
+            console.log(`[EXEC] Completed task ${task.id}`);
+            
+            // Mark task as done
+            task.estado = 'done';
+            updateTask(tasksDoc, task);
+            anyTaskUpdated = true;
+            
+            // Create evidence
+            const evidence = {
+              task_id: task.id,
+              files_changed: parsed.files.map(f => f.path),
+              summary: `Generated ${parsed.files.length} file(s)`,
+              llm_model: task.skill,
+              timestamp: new Date().toISOString()
+            };
+            const evidenceFile = path.join(SYSTEM_DIR, 'evidence', `${task.id}.json`);
+            fs.mkdirSync(path.dirname(evidenceFile), { recursive: true });
+            fs.writeFileSync(evidenceFile, JSON.stringify(evidence, null, 2), 'utf-8');
+            
+          } catch (err) {
+            console.error(`[EXEC ERROR] ${task.id}: ${err?.message || err}`);
+            task.estado = 'failed';
+            updateTask(tasksDoc, task);
+            anyTaskUpdated = true;
+          }
+        }
+        
+        // Save tasks if any were updated
+        if (anyTaskUpdated) {
+          const saved = saveTasksWithLock(tasksDoc, tasksHash);
+          if (!saved.ok) {
+            console.warn('[WARN] Could not save tasks (lock expired or hash mismatch)');
+          }
+        }
+      }
 
       console.log('[NEXT] Ejecuta las tareas del batch, luego:');
       console.log('  1) Marca cada tarea como `done` (o `failed`) en system/tasks.yaml');

@@ -34,7 +34,8 @@
       "devops-deployment",
       "testing-backend-test",
       "security-api-security",
-      "ux"
+      "ux",
+      "frontend-html-basic"
     ],
     "professional": [
       "frontend-react-hooks",
@@ -227,12 +228,52 @@
   },
 
   "providers": {
+    "openrouter": {
+      "type": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1/chat/completions",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "models": {
+        "free_basic": "minimax/minimax-m2.5:free",
+        "free_advanced": "qwen/qwen3.6-plus:free",
+        "free_reasoning": "stepfun/step-3.5-flash:free",
+        "low_cost_coding": "deepseek/deepseek-v3.2",
+        "low_cost_general": "x-ai/grok-4.1-fast",
+        "low_cost_context": "moonshotai/kimi-k2.5",
+        "low_cost_code": "qwen/qwen3-coder-next",
+        "heavy_architecture": "anthropic/claude-opus-4.6",
+        "heavy_codex": "openai/gpt-5.3-codex"
+      }
+    },
     "kilo": {
       "type": "kilo",
       "base_url": ""
     }
   },
-  "active_provider": "kilo",
+  "model_mapping": {
+    "frontend-html-basic": "free_basic",
+    "frontend-react-hooks": "free_advanced",
+    "backend-node-api": "free_advanced",
+    "architecture-global-architect": "heavy_architecture",
+    "cognitive-problem-analyzer": "free_reasoning",
+    "database-postgres-schema": "low_cost_coding",
+    "security-api-security": "low_cost_general",
+    "devops-docker": "free_basic",
+    "testing-backend-test": "free_advanced",
+    "ux": "free_basic",
+    "frontend-animations": "low_cost_general",
+    "backend-dotnet-data-sqlserver": "low_cost_code",
+    "backend-laravel-api": "low_cost_code",
+    "database-migrations-dotnet-prisma": "low_cost_coding",
+    "database-prisma-queries": "low_cost_coding",
+    "devops-ci-cd": "free_advanced",
+    "devops-deployment": "free_advanced",
+    "testing-unit-test": "free_advanced",
+    "testing-integration-test": "free_advanced",
+    "testing-e2e-test": "free_advanced",
+    "testing-test-data": "free_advanced",
+    "default": "free_basic"
+  },
+  "active_provider": "openrouter",
 
   "cost_budget": {
     "max_usd": 50
