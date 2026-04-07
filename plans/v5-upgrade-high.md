@@ -1,4 +1,4 @@
-# 🚀 Plan de Actualización v5.1 - "AgentOS" (Nuevo nombre)
+# 🚀 Plan de Actualización v5.1 - "OrchestOS" (Nuevo nombre - ¡SIN CONFLICTOS!)
 
 **Objetivo**: Transformar el sistema en una herramienta profesional interactiva en 1 semana usando las mejores herramientas del ecosistema.
 
@@ -80,14 +80,34 @@ const evaluationCriteria = {
 
 ---
 
-## 🎯 VISIÓN v5.1: "AgentOS"
+## 🎯 VISIÓN v5.1: "OrchestOS" - TODO DESDE LA WEB
+
+**Nuevo enfoque**: El usuario solo ejecuta `npm run dashboard` y TODO funciona desde la web:
+1. ✅ **Auto-detección de OS** (Windows/Mac/Linux) y configuración automática
+2. ✅ **Instalación guiada** de dependencias (Engram, herramientas necesarias)
+3. ✅ **Configuración visual** desde el navegador
+4. ✅ **Gestión completa** sin tocar la terminal
+5. ✅ **Multi-plataforma** transparente para el usuario
+
+### **Flujo de usuario simplificado:**
+```bash
+# PASO ÚNICO PARA EL USUARIO:
+npm run dashboard  # Abre http://localhost:3000
+# Desde aquí, TODO se hace en el navegador:
+# 1. Setup automático de Engram (detecta OS, instala binary correcto)
+# 2. Configuración de API keys desde UI
+# 3. Creación de proyectos visual
+# 4. Ejecución de tareas desde UI
+# 5. Monitoreo y control completo
+```
 
 Sistema de orquestación multi-agente con:
-1. **Memoria persistente inteligente** (Engram)
-2. **Detección automática de skills** (Autoskills)
-3. **Dashboard web interactivo completo** (Control + Monitoreo)
+1. **Memoria persistente inteligente** (Engram - instalación automática por OS)
+2. **Detección automática de skills** (Autoskills - desde web)
+3. **Dashboard web interactivo completo** (Control + Monitoreo + Setup)
 4. **Integración SDD opcional** (Gentle-AI ecosystem)
 5. **APIs empresariales y webhooks**
+6. **Multi-OS transparente** (Windows/Mac/Linux auto-configurado)
 
 ---
 
@@ -468,16 +488,20 @@ agentos dashboard  # Abre http://localhost:3000
 
 ## ✅ CHECKLIST SEMANAL v5.1
 
-**Día 1**:
-- [ ] Engram instalado e integrado
-- [ ] Autoskills integration funcionando
-- [ ] Skill auto-detection básica
-- [ ] Memory manager completo
+**Día 1 - Memoria Persistente + Skill Detection (EN PROGRESO):**
+- [x] Engram instalado y conectado (HTTP API verificado)
+- [x] Engram client + configuración base (HTTP API) + fallback a file
+- [x] Autoskills integrado (adapter + comando `skills detect`)
+- [x] Skill manager base (índice unificado + vendor)
+- [x] CLI `memory search` + `skills detect/suggest/install`
+- [x] Skill suggestions guardadas en `system/skill_suggestions.json`
+- [ ] **PENDIENTE**: Integración completa Engram con memoria persistente
+- [ ] **PENDIENTE**: Auto-instalación Engram por OS desde dashboard
 
-**Día 2**:
+**Día 2 - Dashboard Interactivo (COMPLETADO 90%):**
 - [x] Dashboard backend (Express)
 - [x] HTMX frontend básico
-- [x] WebSockets para realtime
+- [x] WebSockets para realtime (estructura lista)
 - [x] Task control desde UI
 - [x] Dashboard probado localmente
 - [x] Dashboard ordenado por tabs (Prompt/Tasks/Memory/Skills/Stats/Commands)
@@ -485,6 +509,21 @@ agentos dashboard  # Abre http://localhost:3000
 - [x] Project root editable + Init Project desde UI
 - [x] Skill editor desde UI (crear/editar skills)
 - [x] Project explorer + editor de archivos desde UI
+- [x] **Folder Picker**: Botón "📁 Browse" para seleccionar carpeta
+- [x] **Create Project Button**: Botón en Prompt Studio que usa el prompt como goal
+- [x] **Toast Notifications**: Sistema de notificaciones (success/error/info) con auto-dismiss
+- [x] **Badges de color para tareas**: pending=gray, running=blue, done=green, failed=red, blocked=orange
+- [x] **Indicadores de carga (spinners)**: Para botones durante operaciones
+- [x] **Hover effects**: Animaciones suaves en botones y elementos
+- [x] **Estilos para tree-view**: Explorador de archivos con iconos
+- [x] **Estilos para terminal output**: Panel de logs con colores
+- [x] **Empty states**: Mensajes cuando no hay contenido
+- [x] **Scrollbar personalizado**: Estilo moderno
+- [ ] **PENDIENTE**: Terminal/Output en tiempo real con WebSocket (funcional)
+- [ ] **PENDIENTE**: Kanban-style columns para tareas (drag & drop)
+- [ ] **PENDIENTE**: Confirmación antes de acciones destructivas
+- [ ] **PENDIENTE**: Tooltips explicativos
+- [ ] **PENDIENTE**: Atajos de teclado
 
 **Día 3**:
 - [ ] Integración Gentle-AI SDD (opcional)
@@ -510,37 +549,86 @@ agentos dashboard  # Abre http://localhost:3000
 - [ ] Load testing (50+ proyectos)
 - [ ] Bug fixing crítico
 
-**Día 7**:
-- [ ] Branding (AgentOS)
+**Día 7 - Polish y Lanzamiento (POR COMENZAR):**
+- [ ] Branding (OrchestOS - nuevo nombre)
 - [ ] Documentation completa
 - [ ] Final testing
 - [ ] Release v5.1.0
 
 ## 🚀 PRÓXIMOS PASOS INMEDIATOS
 
-1. **Confirmar plan v5.1** con Carlos
-2. **Comenzar Día 1**: Instalar Engram + crear memory-manager.js
-3. **Integrar Autoskills** como módulo
-4. **Preparar renaming** a AgentOS
+1. **Terminar integración Engram completa** - Conectar memory-manager.js con dashboard
+2. **Implementar WebSockets realtime funcional** - Terminal output en tiempo real
+3. **Kanban columns para tareas** - Drag & drop visual
+4. **Auto-instalación multi-OS** - Detectar Windows/Mac/Linux y configurar automáticamente
+5. **Renaming a OrchestOS** - Cambiar nombre en código y documentación
 
 ---
 
-## ✅ AVANCE (Checklist vivo)
+## ✅ RESUMEN DE PROGRESO ACTUAL
 
-- [x] Crear estructura base `src/integrations/`
-- [x] `memory-manager.js` base integrado con compaction (sin Engram todavía)
-- [x] Engram instalado y conectado (HTTP API verificado)
-- [x] Engram client + configuración base (HTTP API) + fallback a file
-- [x] Autoskills integrado (adapter + comando `skills detect`)
-- [x] Skill manager base (índice unificado + vendor)
-- [x] CLI `memory search` + `skills detect/suggest/install`
-- [x] Skill suggestions guardadas en `system/skill_suggestions.json`
+### **Integraciones completadas:**
+- ✅ Estructura `src/integrations/` creada
+- ✅ `memory-manager.js` con compaction y fallback
+- ✅ Engram instalado y cliente HTTP funcionando
+- ✅ Autoskills integrado con detección automática
+- ✅ Skill manager con índice unificado y vendor system
+- ✅ CLI commands funcionando: `memory search`, `skills detect/suggest/install`
+- ✅ Skill suggestions guardadas automáticamente
+
+### **Dashboard completado (90%):**
+- ✅ Backend Express con WebSockets
+- ✅ Frontend HTMX con tabs organizadas
+- ✅ UI completa: Prompt Studio, Task Control, Memory Explorer, Skill Manager
+- ✅ Features premium: Folder Picker, Project Creator, Toast Notifications
+- ✅ Editor de skills y explorador de archivos
+- ✅ Estilos modernos y UX mejorada
+
+### **Pendiente crítico:**
+- 🔄 Integración completa Engram ↔ Dashboard
+- 🔄 WebSockets realtime funcional (terminal output)
+- 🔄 Kanban columns drag & drop
+- 🔄 Auto-instalación multi-OS
+- 🔄 Renaming a OrchestOS
 
 ---
 
-**Fecha objetivo**: AgentOS v5.1.0 en 7 días  
+**Fecha objetivo**: OrchestOS v5.1.0 en 7 días  
 **Equipo**: Carlos (dev) + AI Assistant  
-**Estado**: Plan optimizado con mejores herramientas disponibles
+**Estado**: Dashboard 90% completado, integraciones en progreso
+
+---
+
+## 🎯 NUEVO ENFOQUE: "TODO DESDE LA WEB"
+
+### **Objetivo principal:**
+El usuario solo necesita ejecutar **UN COMANDO** y todo funciona:
+```bash
+npm run dashboard  # o `orchestos dashboard` en futuro
+```
+
+### **Flujo ideal:**
+1. **Auto-detección de OS** (Windows/Mac/Linux) desde el dashboard
+2. **Instalación guiada** de Engram y dependencias
+3. **Configuración visual** de API keys y settings
+4. **Gestión completa** sin terminal desde navegador
+5. **Multi-plataforma transparente** (mismo UX en todos los OS)
+
+### **Plan de implementación multi-OS:**
+1. **Detector de plataforma** en dashboard
+2. **Instalador automático** por OS:
+   - Windows: Descarga `.exe` de GitHub Releases
+   - macOS: Homebrew o binary universal
+   - Linux: Binary estático o package manager
+3. **Verificador automático** que confirma instalaciones
+4. **Fallback elegante** si algo falla
+
+### **Beneficios:**
+- ✅ **Zero-config para usuarios** - 1 comando, todo funciona
+- ✅ **Multi-OS sin dolor** - Misma experiencia en Windows/Mac/Linux
+- ✅ **Instalación guiada** - Sin leer documentación compleja
+- ✅ **Debug visual** - Problemas visibles en dashboard
+- ✅ **Actualizaciones automáticas** - Desde la web
 
 ---
 
