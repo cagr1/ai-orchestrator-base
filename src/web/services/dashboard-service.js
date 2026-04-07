@@ -1,0 +1,303 @@
+const fs = require('fs');
+const path = require('path');
+const yaml = require('js-yaml');
+const { execSync } = require('child_process');
+const { createMemoryManager } = require('../../integrations/memory-manager');
+
+const createDashboardService = ({ rootDir, realtime, websocket }) => {
+  const systemDir = path.join(rootDir, 'system');
+  const dashboardFile = path.join(systemDir, 'dashboard.json');
+
+  const getActiveRoot = () => {
+    const cfg = getDashboardConfig();
+    return cfg.project_root || rootDir;
+  };
+
+  const getPaths = () => {
+    const activeRoot = getActiveRoot();
+    const activeSystem = path.join(activeRoot, 'system');
+    return {
+      activeRoot,
+      stateFile: path.join(activeSystem, 'state.json'),
+      tasksFile: path.join(activeSystem, 'tasks.yaml'),
+      skillsIndexFile: path.join(activeSystem, 'skills_index.json'),
+      memoryFile: path.join(activeSystem, 'memory.md'),
+      configFile: path.join(activeSystem, 'config.json')
+    };
+  };
+
+  const readJSON = (file) => {
+    try {
+      return JSON.parse(fs.readFileSync(file, 'utf-8'));
+    } catch (_e) {
+      return null;
+    }
+  };
+
+  const readYAML = (file) => {
+    try {
+      return yaml.load(fs.readFileSync(file, 'utf-8'));
+    } catch (_e) {
+      return null;
+    }
+  };
+
+  const writeYAML = (file, data) => {
+    fs.writeFileSync(file, yaml.dump(data, { indent: 2 }), 'utf-8');
+  };
+
+  const broadcast = (event, payload) => {
+    realtime.broadcast(event, payload);
+    websocket?.broadcast?.(event, payload);
+  };
+
+  const getStatus = () => {
+    const { stateFile } = getPaths();
+    return readJSON(stateFile) || { status: 'unknown' };
+  };
+
+  const getTasks = () => {
+    const { tasksFile } = getPaths();
+    const doc = readYAML(tasksFile) || { tasks: [] };
+    return doc.tasks || [];
+  };
+
+  const createTask = (payload) => {
+    const { tasksFile } = getPaths();
+    const doc = readYAML(tasksFile) || { version: '3.0', tasks: [], metadata: {} };
+    const tasks = doc.tasks || [];
+    const nextId = `T${tasks.length + 1}`;
+    const task = {
+      id: nextId,
+      title: payload.title || 'Nueva tarea',
+      description: payload.description || '',
+      skill: payload.skill || 'frontend-html-basic',
+      estado: 'pending',
+      priority: payload.priority || 2,
+      depends_on: payload.depends_on || [],
+      input: payload.input || [],
+      output: payload.output || []
+    };
+    tasks.push(task);
+    doc.tasks = tasks;
+    doc.metadata = doc.metadata || {};
+    doc.metadata.total_tasks = tasks.length;
+    doc.metadata.pending = (doc.metadata.pending || 0) + 1;
+    writeYAML(tasksFile, doc);
+    broadcast('tasks:updated', tasks);
+    return task;
+  };
+
+  const updateTask = (taskId, payload) => {
+    const { tasksFile } = getPaths();
+    const doc = readYAML(tasksFile) || { tasks: [] };
+    const tasks = doc.tasks || [];
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return { error: 'task_not_found' };
+
+    Object.assign(task, payload);
+    writeYAML(tasksFile, doc);
+    broadcast('tasks:updated', tasks);
+    return task;
+  };
+
+  const triggerRun = () => {
+    try {
+      const { activeRoot } = getPaths();
+      const output = execSync('node runner.js run', { cwd: activeRoot, encoding: 'utf-8' });
+      return { ok: true, output };
+    } catch (e) {
+      return { ok: false, output: e.stdout || e.message };
+    }
+  };
+
+  const applyControl = (payload) => {
+    const { stateFile } = getPaths();
+    const state = readJSON(stateFile) || {};
+    if (payload.status) state.status = payload.status;
+    if (payload.phase) state.phase = payload.phase;
+    fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+    broadcast('status:updated', state);
+    return state;
+  };
+
+  const getDashboardConfig = () => readJSON(dashboardFile) || { project_root: rootDir, prompt: '' };
+
+  const updateDashboardConfig = (payload) => {
+    const current = getDashboardConfig();
+    const next = { ...current, ...payload };
+    fs.writeFileSync(dashboardFile, JSON.stringify(next, null, 2));
+    return next;
+  };
+
+  const ensureProjectRoot = (projectRoot) => {
+    if (!projectRoot) return;
+    if (!fs.existsSync(projectRoot)) {
+      fs.mkdirSync(projectRoot, { recursive: true });
+    }
+  };
+
+  const initProject = (goal, projectRoot) => {
+    try {
+      const next = updateDashboardConfig({ project_root: projectRoot || getActiveRoot() });
+      ensureProjectRoot(next.project_root);
+      const output = execSync(`node runner.js init "${goal || 'Define project goal here'}"`, {
+        cwd: next.project_root,
+        encoding: 'utf-8'
+      });
+      return { ok: true, output };
+    } catch (e) {
+      return { ok: false, output: e.stdout || e.message };
+    }
+  };
+
+  const listProjectFiles = () => {
+    const { activeRoot } = getPaths();
+    const exclude = new Set(['node_modules', '.git', 'dist', 'build']);
+    const files = [];
+    const walk = (dir) => {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (exclude.has(entry.name)) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else {
+          files.push(path.relative(activeRoot, full).replace(/\\/g, '/'));
+        }
+      }
+    };
+    walk(activeRoot);
+    return files.sort();
+  };
+
+  const readProjectFile = (relPath) => {
+    const { activeRoot } = getPaths();
+    const full = path.resolve(activeRoot, relPath);
+    if (!full.startsWith(activeRoot)) return { error: 'invalid_path' };
+    try {
+      const content = fs.readFileSync(full, 'utf-8');
+      return { ok: true, content, path: relPath };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+
+  const writeProjectFile = (relPath, content) => {
+    const { activeRoot } = getPaths();
+    const full = path.resolve(activeRoot, relPath);
+    if (!full.startsWith(activeRoot)) return { error: 'invalid_path' };
+    const dir = path.dirname(full);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(full, content || '', 'utf-8');
+    return { ok: true, path: relPath };
+  };
+
+  const listSkills = () => {
+    try {
+      const { skillsIndexFile } = getPaths();
+      const data = JSON.parse(fs.readFileSync(skillsIndexFile, 'utf-8'));
+      return data.items || [];
+    } catch (_e) {
+      return [];
+    }
+  };
+
+  const listSkillFiles = () => {
+    const { activeRoot } = getPaths();
+    const skillsDir = path.join(activeRoot, 'skills');
+    if (!fs.existsSync(skillsDir)) return [];
+    const files = [];
+    const walk = (dir) => {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (entry.name.endsWith('.md')) {
+          files.push(path.relative(skillsDir, full).replace(/\\/g, '/'));
+        }
+      }
+    };
+    walk(skillsDir);
+    return files.sort();
+  };
+
+  const readSkillFile = (relPath) => {
+    const { activeRoot } = getPaths();
+    const skillsDir = path.join(activeRoot, 'skills');
+    const full = path.resolve(skillsDir, relPath);
+    if (!full.startsWith(skillsDir)) return { error: 'invalid_path' };
+    try {
+      const content = fs.readFileSync(full, 'utf-8');
+      return { ok: true, content, path: relPath };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+
+  const writeSkillFile = (relPath, content) => {
+    const { activeRoot } = getPaths();
+    const skillsDir = path.join(activeRoot, 'skills');
+    const full = path.resolve(skillsDir, relPath);
+    if (!full.startsWith(skillsDir)) return { error: 'invalid_path' };
+    const dir = path.dirname(full);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(full, content || '', 'utf-8');
+    return { ok: true, path: relPath };
+  };
+
+  const refreshSkills = () => {
+    try {
+      const { activeRoot } = getPaths();
+      execSync('node runner.js skills rebuild', { cwd: activeRoot, encoding: 'utf-8' });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.stdout || e.message };
+    }
+  };
+
+  const detectSkills = (apply = false) => {
+    try {
+      const cmd = apply ? 'node runner.js skills install' : 'node runner.js skills detect';
+      const { activeRoot } = getPaths();
+      const output = execSync(cmd, { cwd: activeRoot, encoding: 'utf-8' });
+      return { ok: true, output };
+    } catch (e) {
+      return { ok: false, output: e.stdout || e.message };
+    }
+  };
+
+  const searchMemory = async (query) => {
+    const { memoryFile, configFile, activeRoot } = getPaths();
+    const memoryManager = createMemoryManager({ memoryFile, configFile });
+    const project = path.basename(activeRoot);
+    return memoryManager.search({ query, project, limit: 10 });
+  };
+
+  return {
+    getStatus,
+    getTasks,
+    createTask,
+    updateTask,
+    triggerRun,
+    applyControl,
+    getDashboardConfig,
+    updateDashboardConfig,
+    initProject,
+    listSkills,
+    listSkillFiles,
+    readSkillFile,
+    writeSkillFile,
+    listProjectFiles,
+    readProjectFile,
+    writeProjectFile,
+    refreshSkills,
+    detectSkills,
+    searchMemory
+  };
+};
+
+module.exports = { createDashboardService };

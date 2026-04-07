@@ -12,3 +12,4 @@ system/provider.json
 system/cost.json
 system/splits/
 _smoke_test_project/
+.env

@@ -475,10 +475,16 @@ agentos dashboard  # Abre http://localhost:3000
 - [ ] Memory manager completo
 
 **Día 2**:
-- [ ] Dashboard backend (Express)
-- [ ] HTMX frontend básico
-- [ ] WebSockets para realtime
-- [ ] Task control desde UI
+- [x] Dashboard backend (Express)
+- [x] HTMX frontend básico
+- [x] WebSockets para realtime
+- [x] Task control desde UI
+- [x] Dashboard probado localmente
+- [x] Dashboard ordenado por tabs (Prompt/Tasks/Memory/Skills/Stats/Commands)
+- [x] Memory search + Skills actions desde UI
+- [x] Project root editable + Init Project desde UI
+- [x] Skill editor desde UI (crear/editar skills)
+- [x] Project explorer + editor de archivos desde UI
 
 **Día 3**:
 - [ ] Integración Gentle-AI SDD (opcional)
@@ -516,6 +522,19 @@ agentos dashboard  # Abre http://localhost:3000
 2. **Comenzar Día 1**: Instalar Engram + crear memory-manager.js
 3. **Integrar Autoskills** como módulo
 4. **Preparar renaming** a AgentOS
+
+---
+
+## ✅ AVANCE (Checklist vivo)
+
+- [x] Crear estructura base `src/integrations/`
+- [x] `memory-manager.js` base integrado con compaction (sin Engram todavía)
+- [x] Engram instalado y conectado (HTTP API verificado)
+- [x] Engram client + configuración base (HTTP API) + fallback a file
+- [x] Autoskills integrado (adapter + comando `skills detect`)
+- [x] Skill manager base (índice unificado + vendor)
+- [x] CLI `memory search` + `skills detect/suggest/install`
+- [x] Skill suggestions guardadas en `system/skill_suggestions.json`
 
 ---
 

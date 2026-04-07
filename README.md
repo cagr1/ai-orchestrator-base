@@ -17,6 +17,8 @@ Sistema multi-agente **determinístico y paralelo** donde agentes especializados
 - **🤖 Ejecución Real con LLM**: Integración con OpenRouter para generación automática de código
 - **📝 Escritura de Archivos**: Parseo automático de JSON y creación de archivos en disco
 - **🎯 Modelos Inteligentes**: Selección automática de modelo según tipo de tarea (free, low-cost, premium)
+- **🧠 Memoria Persistente**: Integración con Engram (HTTP API) + fallback a archivo
+- **🧩 Autoskills**: Detección/instalación automática de skills con organización por categorías
 
 ---
 
@@ -48,6 +50,31 @@ El sistema selecciona el modelo óptimo según el skill de la tarea:
 - **Premium**: claude-opus-4.6, gpt-5.3-codex
 
 ---
+
+### Memoria persistente con Engram
+
+Engram funciona como memoria a largo plazo vía HTTP API. El runner usa Engram cuando `memory.provider` está en `engram` y hace fallback a `system/memory.md` si el servicio no está disponible.
+
+```bash
+# Levantar Engram (HTTP API)
+engram serve 7437
+
+# Config (system/config.json)
+"memory": { "provider": "engram" }
+"engram": { "enabled": true, "base_url": "http://127.0.0.1:7437" }
+```
+
+---
+
+### Autoskills (detección automática)
+
+Autoskills detecta tecnologías y propone skills. El output se guarda en `system/autoskills.last.txt`.  
+Con `--apply` instala y organiza links en `skills/vendor/<categoria>/`.
+
+```bash
+node runner.js skills detect
+node runner.js skills detect --apply
+```
 
 ---
 
@@ -99,6 +126,8 @@ ai-orchestrator-base/
 │   ├── architecture/
 │   ├── cognitive/
 │   └── classifier/
+│   └── vendor/            # Skills instaladas por Autoskills (organizadas por categoría)
+├── .agents/skills/         # Fuente vendor de Autoskills (no tocar manualmente)
 └── tests/                 # Tests invariantes
     ├── run-all.js
     ├── phase1_state.test.js
@@ -141,6 +170,9 @@ node runner.js review
 # Ejecutar tests
 npm test
 
+# Levantar dashboard
+node src/web/server.js
+
 # Refrescar snapshot de contexto
 node runner.js context
 
@@ -153,6 +185,8 @@ node runner.js validate
 # Indexar skills y buscar
 node runner.js skills
 node runner.js skills search "frontend"
+node runner.js skills detect
+node runner.js skills detect --apply
 
 # Sugerir split de tarea grande
 node runner.js split T1
@@ -398,148 +432,4 @@ $ node runner.js status
 - iteration: 5/50
 - status: running
 - tasks_completed: 5/5
-- consecutive_failures: 0
-
-$ node runner.js resume
-[RESUME] Reset counters and continuing...
 ```
-
----
-
-## 🔧 Configuración
-
-El runner lee `system/config.json`. Soporta un bloque `limits` (opcional) para ajustar topes, y `evidence` para enforcement.
-
-```json
-{
-  "version": "3.0",
-  "limits": {
-    "max_tasks_per_run": 5,
-    "max_iterations": 50,
-    "checkpoint_interval": 5,
-    "max_batch_size": 3,
-    "cooldown_threshold": 3
-  },
-  "context": {
-    "max_memory_entries": 20,
-    "compaction_enabled": true,
-    "max_lines": 120,
-    "working_set_limit": 10
-  },
-  "evidence": {
-    "required": true,
-    "min_files_changed": 1
-  },
-  "tasks": {
-    "id_pattern": "^T\\d+(_fix)?$"
-  },
-  "providers": {
-    "kilo": {
-      "type": "kilo",
-      "base_url": ""
-    }
-  },
-  "active_provider": "kilo",
-  "cost_budget": {
-    "max_usd": 50
-  },
-  "retention": {
-    "events_max_lines": 2000,
-    "evidence_max_days": 30
-  },
-  "review_hooks": {
-    "auto_run": false,
-    "commands": ["npm test"]
-  },
-  "redaction": {
-    "enabled": true
-  }
-}
-```
-
----
-
-## 📚 Documentación Adicional
-
-- [`USAGE.md`](USAGE.md) - Guía completa de uso
-- [`TECHNICAL.md`](TECHNICAL.md) - Documentación técnica y arquitectura
-- [`plans/v3-deterministic-parallel-orchestrator-plan.md`](plans/v3-deterministic-parallel-orchestrator-plan.md) - Plan de implementación v3.0
-- [`agents/planner.md`](agents/planner.md) - Definición del Planner
-- [`agents/checkpoint.md`](agents/checkpoint.md) - Definición del Checkpoint Agent
-
----
-
-## ✅ Criterios de Éxito v3.0
-
-- [x] Estado de tareas SOLO en tasks.yaml (no duplicado en state.json)
-- [x] State.json mínimo (run_id, iteration, status, execution_control, lock)
-- [x] Run Lock previene ejecución concurrente
-- [x] Hasta 5 tareas por ejecución
-- [x] Contadores de sesión resetean en `resume` (y al iniciar un run nuevo)
-- [x] Batch selection recalculado cada ejecución
-- [x] max_iterations = 50 detiene ejecución
-- [x] Sin while loops - ejecución single-round
-- [x] Tareas con campos input/output definidos
-- [x] Formato de evidencia mínimo
-- [x] Checkpoint actualiza memory.md
-- [x] Regla de recálculo ejecuta antes de cada run
-- [x] Límites de tamaño de tarea (R9)
-- [x] Validación de dependencias (existencia + ciclos)
-- [x] Detección automática de completitud
-- [x] R10: Validación de evidencia vs task.output
-- [x] Lock TTL previene deadlocks permanentes
-- [x] Ordenamiento determinístico de batches
-- [x] R11: Guardrail del Planner
-- [x] Tests invariantes para todas las fases críticas
-- [x] `npm test` pasa antes de commit
-- [x] **Ejecución automática con LLM** (v3.0.1)
-- [x] **Escritura de archivos en disco** (v3.0.1)
-- [x] **Configuración de modelos por skill** (v3.0.1)
-- [x] **Evidencia automática con metadata** (v3.0.1)
-
----
-
-## 📝 Changelog
-
-### v3.0.1 - LLM Execution (2026-04-06)
-- **Ejecución Real con LLM**: Integración con OpenRouter para ejecutar tareas automáticamente
-- **Escritura de Archivos**: Parseo automático de JSON y creación de archivos en disco
-- **Configuración de Modelos**: Sistema de mapeo de skills a modelos (free, low-cost, premium)
-- **Evidencia Automática**: Creación de evidence files con metadata de ejecución
-- **dotenv Support**: Carga de API keys desde archivo .env
-- **Nuevos Modelos**:
-  - Free: minimax-m2.5, qwen3.6-plus, step-3.5-flash
-  - Low-cost: deepseek-v3.2, grok-4.1-fast, kimi-k2.5, qwen3-coder-next
-  - Premium: claude-opus-4.6, gpt-5.3-codex
-
-### v3.1 - Improvements (2026-03-06)
-- **Mejora 1**: Tareas correctivas - Soporte para T5 → T5_fix sin mutar originales
-- **Mejora 2**: Attempts/Max Attempts - Control de reintentos con failed_permanent
-- **Mejora 3**: Memory Compaction - Auto-compacta cuando excede 20 entradas
-- **Mejora 5**: Skills cognitivas - problem-analyzer, solution-evaluator, dependency-reasoner
-- **Mejora 6**: Architecture skills - system-design, api-design, db-boundaries
-- 50+ tests invariantes
-
-### v3.0 - Deterministic Parallel Orchestrator
-- Refactor completo a arquitectura paralela
-- Nuevo formato tasks.yaml con input/output
-- Límites de ejecución (max_tasks_per_run, max_iterations)
-- Sistema de cooldown con consecutive_failures
-- Run Lock con TTL para recuperación ante fallos
-- R9: Validación de tamaño de tarea
-- R10: Validación anti-hallucination
-- R11: Guardrail anti-destrucción del planner
-- 30+ tests invariantes
-
-### v2.0 - Sequential Loop-Based Runner
-- Orquestador basado en while loop
-- Formato tasks.md
-- Iteraciones ilimitadas
-
-### v1.0 - Initial Release
-- Sistema multi-agente básico
-- Agentes: Planner, Executor, QA, Reviewer
-
----
-
-**Desarrollado con ❤️ por Carlos Gallardo**

@@ -1,0 +1,196 @@
+"/* === MEJORAS DASHBOARD v5.1 === */
+
+/* Estado de tareas con colores */
+.task-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.task-state.pending { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+.task-state.running { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+.task-state.done { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+.task-state.failed { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.task-state.blocked { background: rgba(251, 146, 60, 0.2); color: #fb923c; }
+
+/* Spinner para indicadores de carga */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(148, 163, 184, 0.3);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+.spinner.sm { width: 12px; height: 12px; border-width: 1.5px; }
+.spinner.lg { width: 24px; height: 24px; border-width: 3px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Toast notifications */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 400px;
+}
+
+.toast {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #111827;
+  border: 1px solid;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: slideIn 0.3s ease-out;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.toast.hide { transform: translateX(100%); opacity: 0; }
+.toast.success { border-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+.toast.error { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+.toast.info { border-color: #38bdf8; background: rgba(56, 189, 248, 0.15); }
+.toast-icon { font-size: 18px; flex-shrink: 0; }
+.toast-content { flex: 1; font-size: 14px; }
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Badges de color para status */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.status-badge.planning { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+.status-badge.execution { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+.status-badge.running { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+.status-badge.paused { background: rgba(251, 146, 60, 0.2); color: #fb923c; }
+.status-badge.completed { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+
+/* Botón primary mejorado */
+.btn.primary {
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  color: white;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 20px rgba(56, 189, 248, 0.3);
+}
+.btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(56, 189, 248, 0.4);
+}
+
+/* Hover effects mejorados */
+.nav-item, .btn, .task, .pending { transition: all 0.2s ease; }
+.nav-item:hover { background: rgba(56, 189, 248, 0.1); transform: translateX(4px); }
+.btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
+.pending:hover { background: rgba(56, 189, 248, 0.15); transform: translateX(4px); }
+
+/* Campo de búsqueda con icono */
+.search-box { position: relative; display: flex; align-items: center; }
+.search-box input { padding-left: 40px; width: 100%; }
+.search-box::before {
+  content: "🔍";
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.5); }
+
+/* Panel de archivos tree view */
+.tree-view { list-style: none; margin: 0; padding: 0; }
+.tree-item {
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.tree-item:hover { background: rgba(56, 189, 248, 0.1); }
+.tree-item.folder::before { content: "📁"; font-size: 16px; }
+.tree-item.file::before { content: "📄"; font-size: 16px; }
+.tree-item.file.md::before { content: "📝"; }
+.tree-item.file.js::before, .tree-item.file.ts::before { content: "📜"; }
+.tree-item.file.json::before { content: "🗂️"; }
+.tree-children { margin-left: 24px; border-left: 1px solid rgba(148, 163, 184, 0.2); padding-left: 12px; }
+
+/* Botón folder picker */
+.file-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.file-picker-btn:hover { background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; }
+
+/* Terminal output */
+.terminal {
+  background: #0b1220;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.terminal-line { margin: 4px 0; white-space: pre-wrap; word-break: break-all; }
+.terminal-line.info { color: #e2e8f0; }
+.terminal-line.warn { color: #fbbf24; }
+.terminal-line.error { color: #ef4444; }
+.terminal-line.success { color: #22c55e; }
+
+/* Estado vacío mejorado */
+.empty-state { text-align: center; padding: 40px 20px; color: #94a3b8; }
+.empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.6; }
+.empty-state h3 { margin: 0 0 8px; color: #e2e8f0; }
+.empty-state p { margin: 0; font-size: 14px; }
+
+/* Input con botón integrado */
+.input-with-btn {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.input-with-btn input { flex: 1; }
+.input-with-btn .btn { flex-shrink: 0; }
+</contents>

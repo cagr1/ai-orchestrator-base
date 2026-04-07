@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-04-07T03:39:51.437Z",
+  "suggestions": [
+    {
+      "source": "wshobson",
+      "skill": "nodejs-backend-patterns",
+      "hint": "Node.js"
+    },
+    {
+      "source": "sickn33",
+      "skill": "nodejs-best-practices",
+      "hint": "Node.js"
+    },
+    {
+      "source": "anthropics",
+      "skill": "frontend-design",
+      "hint": "Frontend"
+    },
+    {
+      "source": "addyosmani",
+      "skill": "accessibility",
+      "hint": "Frontend"
+    },
+    {
+      "source": "addyosmani",
+      "skill": "seo",
+      "hint": "Frontend"
+    }
+  ]
+}

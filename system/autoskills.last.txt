@@ -1,0 +1,33 @@
+
+   ╔═══════════════════════════════════════╗
+   ║   autoskills                 v0.2.4   ║
+   ║   Auto-install the best AI skills     ║
+   ║   for your project                    ║
+   ╚═══════════════════════════════════════╝
+
+   Scanning project...[K   ◆ Detected technologies:
+
+     ✔ Node.js   
+
+   ◆ Skills to install (5, 5 already installed)
+
+    1. wshobson › nodejs-backend-patterns (installed)  ← Node.js
+    2. sickn33 › nodejs-best-practices (installed)     ← Node.js
+    3. anthropics › frontend-design (installed)        ← Frontend
+    4. addyosmani › accessibility (installed)          ← Frontend
+    5. addyosmani › seo (installed)                    ← Frontend
+
+
+   ◆ Installing skills...
+   Agents: universal, codex
+
+   ✔ addyosmani/web-quality-skills/accessibility
+   ✔ addyosmani/web-quality-skills/seo
+   ✔ anthropics/skills/frontend-design
+   ✔ wshobson/agents/nodejs-backend-patterns
+   ✔ sickn33/antigravity-awesome-skills/nodejs-best-practices
+
+   ✔ Done! 5 skills installed in 21.4s.
+
+   Enjoyed autoskills? Consider sponsoring → https://github.com/sponsors/midudev
+

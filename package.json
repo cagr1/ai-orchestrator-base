@@ -9,10 +9,13 @@
     "resume": "node runner.js resume",
     "status": "node runner.js status",
     "review": "node runner.js review",
+    "dashboard": "node src/web/server.js",
     "test": "node tests/run-all.js"
   },
   "dependencies": {
     "dotenv": "^17.4.1",
-    "js-yaml": "^4.1.0"
+    "express": "^5.2.1",
+    "js-yaml": "^4.1.0",
+    "ws": "^8.20.0"
   }
 }

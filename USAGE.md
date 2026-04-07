@@ -4,7 +4,7 @@ Sistema de orquestación determinística y paralela para agentes de IA. Gestiona
 
 ---
 
-## 🆕 Novedades v3.0
+## 🆕 Novedades v3.0 (Actualizado)
 
 - **Ejecución por rondas**: `node runner.js run` ejecuta hasta 5 tareas y detiene
 - **Batches paralelos**: Hasta 3 tareas simultáneas seleccionadas por prioridad
@@ -12,6 +12,8 @@ Sistema de orquestación determinística y paralela para agentes de IA. Gestiona
 - **Protección anti-hallucination**: R10 valida evidencia vs archivos permitidos
 - **Recuperación de fallos**: TTL de 30 minutos en el Run Lock
 - **30+ tests**: Validación completa sin frameworks pesados
+- **Memoria persistente**: Integración con Engram (HTTP API) con fallback a archivo
+- **Autoskills**: Detección e instalación de skills con comando integrado
 
 ---
 
@@ -121,11 +123,21 @@ Genera/actualiza `system/context.md` con un resumen corto del estado (goal, tare
 
 ---
 
+### `memory` - Búsqueda de Memoria
+
+```bash
+node runner.js memory search "auth middleware"
+```
+
+Consulta Engram si está habilitado; si no, busca en `system/memory.md`.
+
 ## 📊 Dashboard y Auditoría
 
 - `system/status.md`: resumen de progreso, riesgos y salud de dependencias.
 - `system/events.log`: bitácora de eventos (init, run, done, fail, verify).
 - `system/runs/<run_id>/history.log`: historial resumido por ejecución (gitignore).
+- `node src/web/server.js`: levanta el dashboard en `http://localhost:3000`.
+- `npm run dashboard`: atajo oficial para levantar el dashboard.
 
 ## 📦 Templates y Domain Packs
 
@@ -224,9 +236,19 @@ Verifica evidencia para todas las tareas `done` (R10 y criterios de aceptacion s
 node runner.js skills
 node runner.js skills search "frontend"
 node runner.js skills rebuild
+node runner.js skills detect
+node runner.js skills detect --apply
+node runner.js skills suggest
+node runner.js skills install
 ```
 
-Genera/consulta `system/skills_index.json` para búsqueda rápida.
+Genera/consulta `system/skills_index.json` para búsqueda rápida.  
+`skills detect` ejecuta **Autoskills** y guarda el output en `system/autoskills.last.txt`.  
+Guarda además sugerencias en `system/skill_suggestions.json`.  
+Con `--apply`, instala las skills sugeridas y organiza enlaces en `skills/vendor/`.  
+`skills install` es equivalente a `skills detect --apply`.  
+`skills suggest` lista las últimas recomendaciones detectadas.
+`skills rebuild` ahora también reorganiza automáticamente cualquier skill nueva en `skills/vendor/`.
 
 ---
 
@@ -441,6 +463,17 @@ El runner lee `system/config.json` en cada `run/resume`. Puedes definir `limits`
 ```json
 {
   "version": "3.0",
+  "memory": {
+    "max_entries": 20,
+    "enable_compaction": true,
+    "provider": "engram"
+  },
+  "engram": {
+    "enabled": true,
+    "base_url": "http://127.0.0.1:7437",
+    "timeout_ms": 5000,
+    "fallback_to_file": true
+  },
   "limits": {
     "max_tasks_per_run": 5,
     "max_iterations": 50,
@@ -463,12 +496,13 @@ El runner lee `system/config.json` en cada `run/resume`. Puedes definir `limits`
     "id_pattern": "^T\\d+(_fix)?$"
   },
   "providers": {
-    "kilo": {
-      "type": "kilo",
-      "base_url": ""
+    "openrouter": {
+      "type": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1/chat/completions",
+      "api_key_env": "OPENROUTER_API_KEY"
     }
   },
-  "active_provider": "kilo",
+  "active_provider": "openrouter",
   "cost_budget": {
     "max_usd": 50
   },
@@ -601,4 +635,4 @@ node runner.js status
 ---
 
 **Versión:** 3.0 - Deterministic Parallel Orchestrator  
-**Última actualización:** 2024-03-03
+**Última actualización:** 2026-04-07

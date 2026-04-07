@@ -215,7 +215,14 @@
   
   "memory": {
     "max_entries": 20,
-    "enable_compaction": true
+    "enable_compaction": true,
+    "provider": "engram"
+  },
+  "engram": {
+    "enabled": true,
+    "base_url": "http://127.0.0.1:7437",
+    "timeout_ms": 5000,
+    "fallback_to_file": true
   },
 
   "context": {
@@ -293,5 +300,9 @@
 
   "redaction": {
     "enabled": true
+  },
+
+  "limits": {
+    "checkpoint_interval": 1
   }
 }

@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentOS Dashboard</title>
+    <link rel="stylesheet" href="/assets/dashboard.css" />
+    <link rel="stylesheet" href="/assets/dashboard-improvements.css" />
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+  </head>
+  <body>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+    <main class="shell layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <p class="eyebrow">AgentOS</p>
+          <h1 data-i18n="title">Operations Dashboard</h1>
+          <p class="muted" data-i18n="subtitle">Control, memory, skills, and execution in one place.</p>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item active" data-tab="prompt" data-i18n="tab_prompt">Prompt Studio</button>
+          <button class="nav-item" data-tab="tasks" data-i18n="tab_tasks">Tasks</button>
+          <button class="nav-item" data-tab="memory" data-i18n="tab_memory">Memory</button>
+          <button class="nav-item" data-tab="skills" data-i18n="tab_skills">Skills</button>
+          <button class="nav-item" data-tab="project" data-i18n="tab_project">Project</button>
+          <button class="nav-item" data-tab="stats" data-i18n="tab_stats">Stats</button>
+          <button class="nav-item" data-tab="commands" data-i18n="tab_commands">Commands</button>
+        </nav>
+
+        <div class="status-card" id="statusCard">
+          <p class="label" data-i18n="status">Status</p>
+          <p class="value" id="statusValue">Loading...</p>
+          <p class="meta" id="statusMeta">-</p>
+          <button class="pill toggle" id="langToggle">EN</button>
+        </div>
+
+        <div class="panel compact">
+          <div class="panel-header">
+            <h2 data-i18n="pending">Pending</h2>
+            <span class="pill" id="pendingCount">0</span>
+          </div>
+          <div class="panel-body" id="pendingList"></div>
+        </div>
+      </aside>
+
+      <section class="content">
+        <header class="content-header">
+          <div>
+            <h2 id="tabTitle">Prompt Studio</h2>
+            <p class="muted" id="tabSubtitle">Write or paste your prompts with focus.</p>
+          </div>
+          <div class="content-actions">
+            <button class="btn ghost" hx-post="/api/v1/execute" hx-swap="none" data-i18n="run">Run</button>
+            <button class="btn" id="savePromptBtn" data-i18n="save">Save</button>
+            <button class="btn primary" id="createProjectBtn" data-i18n="create_project">Create Project</button>
+          </div>
+        </header>
+
+        <section class="tab-panel active" id="tab-prompt">
+          <div class="panel focus">
+            <div class="panel-header">
+              <h2 data-i18n="prompts">Prompt Studio</h2>
+            </div>
+            <div class="panel-body">
+              <label class="label" data-i18n="prompt_label">Active Prompt</label>
+              <textarea class="textbox xl" id="promptInput" rows="12" placeholder="Paste or write your prompt here..."></textarea>
+              <div class="hint-row">
+                <span class="muted">Tip: Start with goal → constraints → output format.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-tasks">
+          <div class="grid two">
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="tasks">Tasks</h2>
+                <button class="btn" hx-post="/api/v1/execute" hx-swap="none" data-i18n="run">Run</button>
+              </div>
+              <div class="panel-body" id="tasksList">
+                <p class="muted" data-i18n="loading">Loading tasks...</p>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="details">Details</h2>
+              </div>
+              <div class="panel-body" id="taskDetails">
+                <p class="muted" data-i18n="select_task">Select a task to see details.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-memory">
+          <div class="grid two">
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="memory">Memory Search</h2>
+              </div>
+              <div class="panel-body">
+                <label class="label" data-i18n="memory_query">Search query</label>
+                <input class="textbox" id="memoryQuery" placeholder="auth middleware" />
+                <button class="btn" id="memorySearchBtn" data-i18n="search">Search</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="memory_results">Results</h2>
+              </div>
+              <div class="panel-body" id="memoryResults">
+                <p class="muted">No results yet.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-skills">
+          <div class="grid two">
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="skills">Skills</h2>
+                <button class="btn ghost" id="skillsRefreshBtn" data-i18n="refresh">Refresh</button>
+              </div>
+              <div class="panel-body" id="skillsList">
+                <p class="muted">Loading skills...</p>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="skills_actions">Skill Actions</h2>
+              </div>
+              <div class="panel-body">
+                <button class="btn" id="skillsDetectBtn" data-i18n="detect">Detect</button>
+                <button class="btn ghost" id="skillsInstallBtn" data-i18n="install">Install</button>
+                <p class="muted">Autoskills will organize into <code>skills/vendor/</code>.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="skill_editor">Skill Editor</h2>
+              </div>
+              <div class="panel-body">
+                <label class="label" data-i18n="skill_path">Skill path</label>
+                <input class="textbox" id="skillPathInput" placeholder="frontend/my-skill.md" />
+                <textarea class="textbox" id="skillContentInput" rows="10" placeholder="---
+name: my-skill
+description: ...
+---
+"></textarea>
+                <div class="content-actions">
+                  <button class="btn ghost" id="skillLoadBtn" data-i18n="load">Load</button>
+                  <button class="btn" id="skillSaveBtn" data-i18n="save">Save</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-project">
+          <div class="grid two">
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="project_files">Project Files</h2>
+                <button class="btn ghost" id="filesRefreshBtn" data-i18n="refresh">Refresh</button>
+              </div>
+              <div class="panel-body" id="filesList">
+                <p class="muted">No files loaded.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="file_editor">File Editor</h2>
+              </div>
+              <div class="panel-body">
+                <label class="label" data-i18n="file_path">File path</label>
+                <input class="textbox" id="filePathInput" placeholder="index.html" />
+                <textarea class="textbox xl" id="fileContentInput" rows="12" placeholder="Write your file content here..."></textarea>
+                <div class="content-actions">
+                  <button class="btn ghost" id="fileLoadBtn" data-i18n="load">Load</button>
+                  <button class="btn" id="fileSaveBtn" data-i18n="save">Save</button>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="next_steps">Next Steps</h2>
+              </div>
+              <div class="panel-body checklist">
+                <label><input type="checkbox" /> Set project root</label>
+                <label><input type="checkbox" /> Init project</label>
+                <label><input type="checkbox" /> Write prompt</label>
+                <label><input type="checkbox" /> Create files</label>
+                <label><input type="checkbox" /> Run tasks</label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-stats">
+          <div class="grid two">
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="controls">Controls</h2>
+              </div>
+              <div class="panel-body">
+                <form class="control-form" hx-post="/api/v1/control" hx-swap="none">
+                  <label>
+                    Phase
+                    <input name="phase" placeholder="planning / execution" />
+                  </label>
+                  <label>
+                    Status
+                    <input name="status" placeholder="running / paused" />
+                  </label>
+                  <button class="btn" type="submit" data-i18n="apply">Apply</button>
+                </form>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="project">Project Root</h2>
+              </div>
+              <div class="panel-body">
+                <label class="label" data-i18n="project_path">Project path</label>
+                <div class="input-with-btn">
+                <input class="textbox" id="projectPath" placeholder="/Users/name/project" />
+                <button class="file-picker-btn" id="browseFolderBtn">📁 Browse</button>
+              </div>
+                <button class="btn ghost" id="projectSaveBtn" data-i18n="save">Save</button>
+                <p class="muted">Set the directory you want AgentOS to operate on.</p>
+                <label class="label" data-i18n="project_goal">Project goal</label>
+                <input class="textbox" id="projectGoal" placeholder="Build a Hello World in HTML" />
+                <button class="btn" id="projectInitBtn" data-i18n="init">Init Project</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h2 data-i18n="realtime">Realtime Feed</h2>
+              </div>
+              <div class="panel-body">
+                <ul class="feed" id="eventFeed"></ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-commands">
+          <div class="panel">
+            <div class="panel-header">
+              <h2 data-i18n="commands">Commands</h2>
+            </div>
+            <div class="panel-body">
+              <div class="command">node runner.js init "Goal"</div>
+              <div class="command">node runner.js run</div>
+              <div class="command">node runner.js skills detect</div>
+              <div class="command">node runner.js skills install</div>
+              <div class="command">node runner.js memory search "query"</div>
+              <div class="command">npm run dashboard</div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const statusValue = document.getElementById('statusValue');
+      const statusMeta = document.getElementById('statusMeta');
+      const tasksList = document.getElementById('tasksList');
+      const taskDetails = document.getElementById('taskDetails');
+      const pendingList = document.getElementById('pendingList');
+      const pendingCount = document.getElementById('pendingCount');
+      const eventFeed = document.getElementById('eventFeed');
+      const langToggle = document.getElementById('langToggle');
+      const tabs = document.querySelectorAll('.nav-item');
+      const tabPanels = document.querySelectorAll('.tab-panel');
+      const tabTitle = document.getElementById('tabTitle');
+      const tabSubtitle = document.getElementById('tabSubtitle');
+      const promptInput = document.getElementById('promptInput');
+      const memoryQuery = document.getElementById('memoryQuery');
+      const memoryResults = document.getElementById('memoryResults');
+      const memorySearchBtn = document.getElementById('memorySearchBtn');
+      const skillsList = document.getElementById('skillsList');
+      const skillsRefreshBtn = document.getElementById('skillsRefreshBtn');
+      const skillsDetectBtn = document.getElementById('skillsDetectBtn');
+      const skillsInstallBtn = document.getElementById('skillsInstallBtn');
+      const skillPathInput = document.getElementById('skillPathInput');
+      const skillContentInput = document.getElementById('skillContentInput');
+      const skillLoadBtn = document.getElementById('skillLoadBtn');
+      const skillSaveBtn = document.getElementById('skillSaveBtn');
+      const filesList = document.getElementById('filesList');
+      const filesRefreshBtn = document.getElementById('filesRefreshBtn');
+      const filePathInput = document.getElementById('filePathInput');
+      const fileContentInput = document.getElementById('fileContentInput');
+      const fileLoadBtn = document.getElementById('fileLoadBtn');
+      const fileSaveBtn = document.getElementById('fileSaveBtn');
+      const savePromptBtn = document.getElementById('savePromptBtn');
+      const projectPath = document.getElementById('projectPath');
+      const projectGoal = document.getElementById('projectGoal');
+      const projectSaveBtn = document.getElementById('projectSaveBtn');
+      const projectInitBtn = document.getElementById('projectInitBtn');
+
+      const i18n = {
+        en: {
+          title: 'Operations Dashboard',
+          subtitle: 'Control, memory, skills, and execution in one place.',
+          status: 'Status',
+          tasks: 'Tasks',
+          details: 'Details',
+          pending: 'Pending',
+          prompts: 'Prompt Studio',
+          prompt_label: 'Active Prompt',
+          controls: 'Controls',
+          commands: 'Commands',
+          realtime: 'Realtime Feed',
+          run: 'Run',
+          apply: 'Apply',
+          save: 'Save',
+          loading: 'Loading tasks...',
+          select_task: 'Select a task to see details.',
+          tab_prompt: 'Prompt Studio',
+          tab_tasks: 'Tasks',
+          tab_memory: 'Memory',
+          tab_skills: 'Skills',
+          tab_project: 'Project',
+          tab_stats: 'Stats',
+          tab_commands: 'Commands',
+          memory: 'Memory Search',
+          memory_query: 'Search query',
+          memory_results: 'Results',
+          skills: 'Skills',
+          skills_actions: 'Skill Actions',
+          refresh: 'Refresh',
+          detect: 'Detect',
+          install: 'Install',
+          search: 'Search',
+          project: 'Project Root',
+          project_path: 'Project path',
+          project_goal: 'Project goal',
+          init: 'Init Project',
+          skill_editor: 'Skill Editor',
+          skill_path: 'Skill path',
+          load: 'Load',
+          project_files: 'Project Files',
+          file_editor: 'File Editor',
+          file_path: 'File path',
+          next_steps: 'Next Steps'
+        },
+        es: {
+          title: 'Dashboard Operativo',
+          subtitle: 'Control, memoria, skills y ejecución en un solo lugar.',
+          status: 'Estado',
+          tasks: 'Tareas',
+          details: 'Detalles',
+          pending: 'Pendientes',
+          prompts: 'Prompt Studio',
+          prompt_label: 'Prompt Activo',
+          controls: 'Controles',
+          commands: 'Comandos',
+          realtime: 'Actividad en tiempo real',
+          run: 'Ejecutar',
+          apply: 'Aplicar',
+          save: 'Guardar',
+          loading: 'Cargando tareas...',
+          select_task: 'Selecciona una tarea para ver detalles.',
+          tab_prompt: 'Prompt Studio',
+          tab_tasks: 'Tareas',
+          tab_memory: 'Memoria',
+          tab_skills: 'Skills',
+          tab_project: 'Proyecto',
+          tab_stats: 'Estadísticas',
+          tab_commands: 'Comandos',
+          memory: 'Búsqueda de memoria',
+          memory_query: 'Consulta',
+          memory_results: 'Resultados',
+          skills: 'Skills',
+          skills_actions: 'Acciones de skills',
+          refresh: 'Actualizar',
+          detect: 'Detectar',
+          install: 'Instalar',
+          search: 'Buscar',
+          project: 'Ruta del proyecto',
+          project_path: 'Ruta',
+          project_goal: 'Objetivo del proyecto',
+          init: 'Inicializar proyecto',
+          skill_editor: 'Editor de skills',
+          skill_path: 'Ruta del skill',
+          load: 'Cargar',
+          project_files: 'Archivos del proyecto',
+          file_editor: 'Editor de archivos',
+          file_path: 'Ruta del archivo',
+          next_steps: 'Pasos sugeridos'
+        }
+      };
+
+      let currentLang = 'en';
+
+      const applyI18n = () => {
+        document.querySelectorAll('[data-i18n]').forEach((el) => {
+          const key = el.getAttribute('data-i18n');
+          if (i18n[currentLang][key]) {
+            el.textContent = i18n[currentLang][key];
+          }
+        });
+        langToggle.textContent = currentLang.toUpperCase();
+      };
+
+      langToggle.addEventListener('click', () => {
+        currentLang = currentLang === 'en' ? 'es' : 'en';
+        applyI18n();
+        setActiveTab(document.querySelector('.nav-item.active')?.dataset.tab || 'prompt');
+      });
+
+      const renderTasks = (tasks = []) => {
+        if (!tasks.length) {
+          tasksList.innerHTML = `<p class="muted">${i18n[currentLang].loading}</p>`;
+          pendingList.innerHTML = `<p class="muted">${i18n[currentLang].loading}</p>`;
+          pendingCount.textContent = '0';
+          return;
+        }
+        tasksList.innerHTML = tasks.map(task => {
+          return `
+            <button class="task" data-task-id="${task.id}">
+              <div>
+                <h3>${task.id} · ${task.title}</h3>
+                <p class="muted">${task.description || ''}</p>
+              </div>
+              <span class="task-state ${task.estado}">${task.estado}</span>
+            </button>
+          `;
+        }).join('');
+
+        const pending = tasks.filter(t => t.estado === 'pending');
+        pendingCount.textContent = String(pending.length);
+        pendingList.innerHTML = pending.length
+          ? pending.map(t => `<div class="pending">${t.id} · ${t.title}</div>`).join('')
+          : `<p class="muted">${currentLang === 'en' ? 'No pending tasks.' : 'Sin pendientes.'}</p>`;
+
+        tasksList.querySelectorAll('.task').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const task = tasks.find(t => t.id === btn.dataset.taskId);
+            if (!task) return;
+            taskDetails.innerHTML = `
+              <div class="detail">
+                <h3>${task.id} · ${task.title}</h3>
+                <p class="muted">${task.description || ''}</p>
+                <div class="detail-grid">
+                  <div><span>Skill</span>${task.skill}</div>
+                  <div><span>Estado</span>${task.estado}</div>
+                  <div><span>Prioridad</span>${task.priority}</div>
+                  <div><span>Depends</span>${(task.depends_on || []).join(', ') || '-'}</div>
+                </div>
+              </div>
+            `;
+          });
+        });
+      };
+
+      const renderStatus = (state) => {
+        statusValue.innerHTML = `<span class="status-badge ${state.status || 'unknown'}">${state.status || 'unknown'}</span>`;
+        statusMeta.textContent = `phase: ${state.phase || '-'} | iteration: ${state.iteration || 0}`;
+      };
+
+      const loadInitial = async () => {
+        const res = await fetch('/dashboard/data');
+        const data = await res.json();
+        renderStatus(data.status || {});
+        renderTasks(data.tasks || []);
+        if (data.project?.prompt) promptInput.value = data.project.prompt;
+        if (data.project?.project_root) projectPath.value = data.project.project_root;
+      };
+
+      const loadSkills = async () => {
+        const res = await fetch('/api/v1/skills');
+        const items = await res.json();
+        if (!items.length) {
+          skillsList.innerHTML = `<p class="muted">No skills indexed.</p>`;
+          return;
+        }
+        skillsList.innerHTML = items.map(s => `<button class="pending skill-item" data-skill-path="${s.path}">${s.name} <span class="muted">(${s.category})</span></button>`).join('');
+        skillsList.querySelectorAll('.skill-item').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            skillPathInput.value = btn.dataset.skillPath;
+            await loadSkillFile();
+          });
+        });
+      };
+
+      const loadSkillFile = async () => {
+        const rel = skillPathInput.value.trim();
+        if (!rel) return;
+        const res = await fetch(`/api/v1/skills/read?path=${encodeURIComponent(rel)}`);
+        const data = await res.json();
+        if (data?.content) {
+          skillContentInput.value = data.content;
+        }
+      };
+
+      const saveSkillFile = async () => {
+        const rel = skillPathInput.value.trim();
+        if (!rel) return;
+        await fetch('/api/v1/skills/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: rel, content: skillContentInput.value })
+        });
+        loadSkills();
+      };
+
+      const searchMemory = async () => {
+        const q = memoryQuery.value.trim();
+        if (!q) return;
+        const res = await fetch(`/api/v1/memory/search?q=${encodeURIComponent(q)}`);
+        const items = await res.json();
+        if (!items.length) {
+          memoryResults.innerHTML = `<p class="muted">No results.</p>`;
+          return;
+        }
+        memoryResults.innerHTML = items.map(r => `<div class="pending">${r.title ? `${r.title} · ` : ''}${r.content || ''}</div>`).join('');
+      };
+
+      const loadFiles = async () => {
+        const res = await fetch('/api/v1/files');
+        const items = await res.json();
+        if (!items.length) {
+          filesList.innerHTML = `<p class="muted">No files found.</p>`;
+          return;
+        }
+        filesList.innerHTML = items.map(f => `<button class="pending file-item" data-file-path="${f}">${f}</button>`).join('');
+        filesList.querySelectorAll('.file-item').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            filePathInput.value = btn.dataset.filePath;
+            await loadFile();
+          });
+        });
+      };
+
+      const loadFile = async () => {
+        const rel = filePathInput.value.trim();
+        if (!rel) return;
+        const res = await fetch(`/api/v1/files/read?path=${encodeURIComponent(rel)}`);
+        const data = await res.json();
+        if (data?.content !== undefined) {
+          fileContentInput.value = data.content;
+        }
+      };
+
+      const saveFile = async () => {
+        const rel = filePathInput.value.trim();
+        if (!rel) return;
+        await fetch('/api/v1/files/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: rel, content: fileContentInput.value })
+        });
+        loadFiles();
+      };
+
+      const logEvent = (label) => {
+        const item = document.createElement('li');
+        item.textContent = `${new Date().toLocaleTimeString()} · ${label}`;
+        eventFeed.prepend(item);
+        if (eventFeed.children.length > 10) {
+          eventFeed.removeChild(eventFeed.lastChild);
+        }
+      };
+
+      const connectRealtime = () => {
+        const source = new WebSocket(`${location.origin.replace('http', 'ws')}/api/v1/ws`);
+        source.addEventListener('message', (e) => {
+          const msg = JSON.parse(e.data);
+          if (msg.event === 'tasks:updated') {
+            renderTasks(Array.isArray(msg.payload) ? msg.payload : []);
+            logEvent('tasks updated');
+          }
+          if (msg.event === 'status:updated') {
+            renderStatus(msg.payload || {});
+            logEvent('status updated');
+          }
+          if (msg.event === 'run:triggered') logEvent('run triggered');
+          if (msg.event === 'control:updated') logEvent('control updated');
+        });
+      };
+
+      const setActiveTab = (tab) => {
+        tabs.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+        tabPanels.forEach(panel => panel.classList.toggle('active', panel.id === `tab-${tab}`));
+        tabTitle.textContent = i18n[currentLang][`tab_${tab}`] || 'Dashboard';
+        tabSubtitle.textContent = tab === 'prompt'
+          ? (currentLang === 'en' ? 'Write or paste your prompts with focus.' : 'Escribe o pega tus prompts con enfoque.')
+          : tab === 'tasks'
+            ? (currentLang === 'en' ? 'Track tasks and inspect details.' : 'Revisa tareas y detalles.')
+            : tab === 'memory'
+              ? (currentLang === 'en' ? 'Search Engram or local memory.' : 'Busca en Engram o memoria local.')
+              : tab === 'skills'
+                ? (currentLang === 'en' ? 'Review installed skills and update.' : 'Revisa skills instaladas y actualiza.')
+                : tab === 'project'
+                  ? (currentLang === 'en' ? 'Create and edit project files.' : 'Crea y edita archivos del proyecto.')
+                  : tab === 'stats'
+                    ? (currentLang === 'en' ? 'Monitor status and realtime events.' : 'Monitorea estado y eventos en tiempo real.')
+                    : (currentLang === 'en' ? 'Quick access to core commands.' : 'Acceso rápido a comandos clave.');
+      };
+
+      tabs.forEach(btn => {
+        btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
+      });
+
+      skillsRefreshBtn.addEventListener('click', async () => {
+        await fetch('/api/v1/skills/refresh', { method: 'POST' });
+        loadSkills();
+      });
+
+      skillsDetectBtn.addEventListener('click', async () => {
+        await fetch('/api/v1/skills/detect', { method: 'POST' });
+        loadSkills();
+      });
+
+      skillsInstallBtn.addEventListener('click', async () => {
+        await fetch('/api/v1/skills/detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apply: true })
+        });
+        loadSkills();
+      });
+
+      skillLoadBtn.addEventListener('click', loadSkillFile);
+      skillSaveBtn.addEventListener('click', saveSkillFile);
+
+      memorySearchBtn.addEventListener('click', searchMemory);
+
+      savePromptBtn.addEventListener('click', async () => {
+        await fetch('/api/v1/prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: promptInput.value })
+        });
+      });
+
+      projectSaveBtn.addEventListener('click', async () => {
+        await fetch('/api/v1/project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_root: projectPath.value })
+        });
+      });
+
+      // Toast notification function
+      const showToast = (message, type = 'info') => {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+        toast.innerHTML = `<span class="toast-icon">${icons[type]}</span><span class="toast-content">${message}</span>`;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.classList.add('hide');
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      };
+
+      // Browse folder
+      document.getElementById('browseFolderBtn').addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.webkitdirectory = true;
+        input.onchange = (e) => {
+          const files = e.target.files;
+          if (files.length > 0) {
+            const path = files[0].webkitRelativePath.split('/')[0];
+            document.getElementById('projectPath').value = path;
+            showToast('Folder selected: ' + path, 'success');
+          }
+        };
+        input.click();
+      });
+
+      // Create Project button handler
+      document.getElementById('createProjectBtn').addEventListener('click', async () => {
+        const prompt = document.getElementById('promptInput').value.trim();
+        if (!prompt) {
+          showToast('Please enter a prompt first', 'error');
+          return;
+        }
+        const btn = document.getElementById('createProjectBtn');
+        btn.innerHTML = '<span class="spinner sm"></span> Creating...';
+        btn.disabled = true;
+        try {
+          await fetch('/api/v1/project/init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              project_root: document.getElementById('projectPath').value || '.', 
+              goal: prompt 
+            })
+          });
+          showToast('Project created successfully!', 'success');
+          loadFiles();
+        } catch (e) {
+          showToast('Error creating project', 'error');
+        } finally {
+          btn.innerHTML = 'Create Project';
+          btn.disabled = false;
+        }
+      });
+
+      projectInitBtn.addEventListener('click', async () => {
+        projectInitBtn.innerHTML = '<span class="spinner sm"></span>';
+        await fetch('/api/v1/project/init', { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_root: projectPath.value, goal: projectGoal.value })
+        });
+      });
+
+      filesRefreshBtn.addEventListener('click', loadFiles);
+      fileLoadBtn.addEventListener('click', loadFile);
+      fileSaveBtn.addEventListener('click', saveFile);
+
+      applyI18n();
+      setActiveTab('prompt');
+      loadInitial();
+      loadSkills();
+      loadFiles();
+      connectRealtime();
+    </script>
+  </body>
+</html>

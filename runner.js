@@ -13,6 +13,8 @@ const yaml = require('js-yaml');
 const { execSync } = require('child_process');
 const crypto = require('crypto');
 const callOpenRouter = require('./providers/openrouter');
+const { createMemoryManager } = require('./src/integrations/memory-manager');
+const { runAutoskills } = require('./src/integrations/autoskills-adapter');
 
 const ROOT_DIR = __dirname;
 const SYSTEM_DIR = path.join(ROOT_DIR, 'system');
@@ -32,6 +34,11 @@ const PROVIDER_FILE = path.join(SYSTEM_DIR, 'provider.json');
 const AUTO_EXECUTE = true;
 const SKILLS_INDEX_FILE = path.join(SYSTEM_DIR, 'skills_index.json');
 const SPLITS_DIR = path.join(SYSTEM_DIR, 'splits');
+const SKILL_SUGGESTIONS_FILE = path.join(SYSTEM_DIR, 'skill_suggestions.json');
+const memoryManager = createMemoryManager({
+  memoryFile: MEMORY_FILE,
+  configFile: CONFIG_FILE
+});
 
 // ============================================================
 // FILE OPERATIONS
@@ -155,7 +162,11 @@ const collectSkills = (dir, baseDir, items = []) => {
     const rel = path.relative(baseDir, full).replace(/\\/g, '/');
     const content = readFile(full) || '';
     const name = parseFrontmatterName(content) || entry.name.replace(/\.md$/, '');
-    const category = rel.split('/')[0];
+    let category = rel.split('/')[0];
+    if (category === 'vendor') {
+      const parts = rel.split('/');
+      category = parts[1] || 'vendor';
+    }
     items.push({ name, path: rel, category });
   }
   return items;
@@ -844,8 +855,7 @@ const generateMemorySummary = (tasks) => {
 };
 
 const appendToMemory = (content) => {
-  const existing = readFile(MEMORY_FILE) || "# Memory Log\n\n";
-  writeFile(MEMORY_FILE, existing + content + "\n");
+  memoryManager.append(content);
 };
 
 // ============================================================
@@ -857,8 +867,7 @@ const appendToMemory = (content) => {
  * @returns {Object} memory configuration
  */
 const getMemoryConfig = () => {
-  const config = readJSON(CONFIG_FILE);
-  return config?.memory || { max_entries: 20, enable_compaction: true };
+  return memoryManager.getConfig();
 };
 
 /**
@@ -866,12 +875,7 @@ const getMemoryConfig = () => {
  * @returns {number} number of entries
  */
 const countMemoryEntries = () => {
-  const content = readFile(MEMORY_FILE);
-  if (!content) return 0;
-  
-  // Count ## markers that indicate new entries
-  const matches = content.match(/^##/gm);
-  return matches ? matches.length : 0;
+  return memoryManager.countEntries();
 };
 
 /**
@@ -879,77 +883,14 @@ const countMemoryEntries = () => {
  * @returns {boolean} true if compaction should run
  */
 const shouldCompactMemory = () => {
-  const config = getMemoryConfig();
-  
-  if (!config.enable_compaction) {
-    return false;
-  }
-  
-  const entryCount = countMemoryEntries();
-  return entryCount >= config.max_entries;
-};
-
-/**
- * Generate a compact summary of historical entries
- * @param {string} content - existing memory content
- * @returns {string} compact summary
- */
-const generateCompactSummary = (content) => {
-  const lines = content.split('\n');
-  const summaryLines = [
-    "## Historical Summary (Compacted)",
-    `- Compacted at: ${new Date().toISOString()}`,
-    "- Previous entries have been summarized for context preservation"
-  ];
-  
-  // Extract key info from existing entries (tasks completed, decisions)
-  const taskMatches = content.match(/- Tasks completed: \d+/g);
-  if (taskMatches) {
-    const lastMatch = taskMatches[taskMatches.length - 1];
-    summaryLines.push(`- Last known: ${lastMatch}`);
-  }
-  
-  // Count total entries that were compacted
-  const entryCount = (content.match(/^##/gm) || []).length;
-  summaryLines.push(`- Total historical entries: ${entryCount}`);
-  
-  return summaryLines.join('\n');
+  return memoryManager.shouldCompact();
 };
 
 /**
  * Perform memory compaction - keep last N entries + compact summary
  */
 const performMemoryCompaction = () => {
-  const config = getMemoryConfig();
-  const content = readFile(MEMORY_FILE);
-  
-  if (!content) {
-    console.log("[COMPACTION] No memory content to compact");
-    return;
-  }
-  
-  const entries = content.split(/^##/gm).filter(e => e.trim());
-  
-  if (entries.length <= config.max_entries) {
-    console.log(`[COMPACTION] Entry count (${entries.length}) below threshold (${config.max_entries}), skipping`);
-    return;
-  }
-  
-  // Keep the first entry (header) and last N entries
-  const header = entries[0];
-  const keepCount = config.max_entries - 1; // Reserve one for summary
-  const lastEntries = entries.slice(-keepCount);
-  
-  // Generate compact summary of historical entries
-  const historicalContent = entries.slice(1, -keepCount).join('\n##');
-  const summary = generateCompactSummary("##" + historicalContent);
-  
-  // Rebuild memory file
-  const compacted = header + '\n##' + lastEntries.join('\n##');
-  const newContent = compacted + '\n\n' + summary + '\n';
-  
-  writeFile(MEMORY_FILE, newContent);
-  console.log(`[COMPACTION] Compacted ${entries.length - config.max_entries} entries, kept ${config.max_entries}`);
+  memoryManager.compact();
 };
 
 /**
@@ -957,11 +898,7 @@ const performMemoryCompaction = () => {
  * @param {string} content - content to append
  */
 const appendToMemoryWithCompaction = (content) => {
-  appendToMemory(content);
-  
-  if (shouldCompactMemory()) {
-    performMemoryCompaction();
-  }
+  memoryManager.appendWithCompaction(content);
 };
 
 // ============================================================
@@ -1785,6 +1722,11 @@ const main = async () => {
     writeFile(GOAL_FILE, `# Goal\n\n${goal}\n`);
     
     const state = initializeState(goal, config);
+    memoryManager.setSessionContext({
+      sessionId: state.run_id,
+      project: path.basename(ROOT_DIR),
+      directory: ROOT_DIR
+    });
     initializeTasks(state.run_id);
     // Initialize a cheap context snapshot for future runs.
     writeContextSnapshot(state, loadTasks());
@@ -1811,6 +1753,12 @@ const main = async () => {
       console.error('[ERROR] No state found. Run: node runner.js init "Your goal"');
       process.exit(1);
     }
+
+    memoryManager.setSessionContext({
+      sessionId: state.run_id,
+      project: path.basename(ROOT_DIR),
+      directory: ROOT_DIR
+    });
 
     const runtimeConfig = loadRuntimeConfig();
     applyRuntimeConfigToState(state, runtimeConfig);
@@ -2156,7 +2104,84 @@ if (AUTO_EXECUTE) {
 
   if (command === 'skills') {
     const sub = args[1] || '';
+    if (sub === 'detect') {
+      const apply = args.includes('--apply');
+      const verbose = args.includes('--verbose') || args.includes('-v');
+      const agentFlagIndex = args.findIndex(a => a === '--agent' || a === '-a');
+      const agent = agentFlagIndex !== -1 ? args[agentFlagIndex + 1] : null;
+      const result = runAutoskills({
+        cwd: ROOT_DIR,
+        dryRun: !apply,
+        yes: apply,
+        agent: agent || undefined,
+        verbose
+      });
+      const outFile = path.join(SYSTEM_DIR, 'autoskills.last.txt');
+      writeFile(outFile, result.output || '');
+      writeJSON(SKILL_SUGGESTIONS_FILE, {
+        generated_at: nowIso(),
+        suggestions: result.suggestions || []
+      });
+      if (!result.ok) {
+        console.error('[AUTOSKILLS] Detect failed. Output saved to system/autoskills.last.txt');
+        process.exit(1);
+      }
+      console.log('[AUTOSKILLS] Detect completed. Output saved to system/autoskills.last.txt');
+      if (apply) {
+        try {
+          execSync('node scripts/organize-autoskills.js', { stdio: 'inherit' });
+        } catch (_e) {
+          console.error('[AUTOSKILLS] Organization step failed. Run: node scripts/organize-autoskills.js');
+        }
+      }
+      return;
+    }
+    if (sub === 'install') {
+      const verbose = args.includes('--verbose') || args.includes('-v');
+      const agentFlagIndex = args.findIndex(a => a === '--agent' || a === '-a');
+      const agent = agentFlagIndex !== -1 ? args[agentFlagIndex + 1] : null;
+      const result = runAutoskills({
+        cwd: ROOT_DIR,
+        dryRun: false,
+        yes: true,
+        agent: agent || undefined,
+        verbose
+      });
+      const outFile = path.join(SYSTEM_DIR, 'autoskills.last.txt');
+      writeFile(outFile, result.output || '');
+      writeJSON(SKILL_SUGGESTIONS_FILE, {
+        generated_at: nowIso(),
+        suggestions: result.suggestions || []
+      });
+      if (!result.ok) {
+        console.error('[AUTOSKILLS] Install failed. Output saved to system/autoskills.last.txt');
+        process.exit(1);
+      }
+      console.log('[AUTOSKILLS] Install completed. Output saved to system/autoskills.last.txt');
+      try {
+        execSync('node scripts/organize-autoskills.js', { stdio: 'inherit' });
+      } catch (_e) {
+        console.error('[AUTOSKILLS] Organization step failed. Run: node scripts/organize-autoskills.js');
+      }
+      return;
+    }
+    if (sub === 'suggest') {
+      const data = readJSON(SKILL_SUGGESTIONS_FILE);
+      const items = data?.suggestions || [];
+      if (!items.length) {
+        console.log('[AUTOSKILLS] No suggestions found. Run: node runner.js skills detect');
+        return;
+      }
+      items.forEach(s => console.log(`- ${s.source} › ${s.skill}${s.hint ? ` (${s.hint})` : ''}`));
+      console.log(`[AUTOSKILLS] ${items.length} suggestion(s)`);
+      return;
+    }
     if (sub === 'rebuild' || sub === '--rebuild') {
+      try {
+        execSync('node scripts/organize-autoskills.js', { stdio: 'inherit' });
+      } catch (_e) {
+        console.error('[AUTOSKILLS] Organization step failed. Run: node scripts/organize-autoskills.js');
+      }
       const items = buildSkillsIndex();
       console.log(`[SKILLS] Index rebuilt (${items.length} items)`);
       return;
@@ -2214,6 +2239,32 @@ if (AUTO_EXECUTE) {
     console.log(`[SPLIT] Suggestion written to ${outFile}`);
     appendEvent('split', { task: taskId });
     return;
+  }
+
+  if (command === 'memory') {
+    const sub = args[1] || '';
+    if (sub === 'search') {
+      const query = args.slice(2).join(' ').trim();
+      if (!query) {
+        console.error('[ERROR] Missing query. Usage: node runner.js memory search "text"');
+        process.exit(1);
+      }
+      const state = loadState();
+      const project = state?.run_id ? path.basename(ROOT_DIR) : path.basename(ROOT_DIR);
+      memoryManager.search({ query, project, limit: 5 }).then((results) => {
+        if (!results || results.length === 0) {
+          console.log('[MEMORY] No results found');
+          return;
+        }
+        results.forEach((r) => {
+          const line = r.title ? `${r.title} - ${r.content || ''}` : (r.content || JSON.stringify(r));
+          console.log(`- ${line}`.trim());
+        });
+      }).catch(() => {
+        console.error('[MEMORY] Search failed');
+      });
+      return;
+    }
   }
 
   if (command === 'provider') {
@@ -2488,7 +2539,8 @@ if (AUTO_EXECUTE) {
   console.log('  review         Manual review mode');
   console.log('  plan "prompt"  Create planner request (context + goal)');
   console.log('  validate       Validate tasks.yaml against config');
-  console.log('  skills [search <term>|rebuild]  Skills registry');
+  console.log('  skills [detect|install|suggest|search <term>|rebuild]  Skills registry');
+  console.log('  memory search "query"  Search memory (Engram/file)');
   console.log('  split T1        Suggest task split (writes system/splits/T1.yaml)');
   console.log('  provider list|use <name>  Provider selection');
   console.log('  cost [set|add] <amount>  Track budget/spend');
