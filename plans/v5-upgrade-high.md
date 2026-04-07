@@ -541,3 +541,30 @@ agentos dashboard  # Abre http://localhost:3000
 **Fecha objetivo**: AgentOS v5.1.0 en 7 días  
 **Equipo**: Carlos (dev) + AI Assistant  
 **Estado**: Plan optimizado con mejores herramientas disponibles
+
+---
+
+## ✅ MEJORAS DASHBOARD IMPLEMENTADAS (v5.1)
+
+### 🎯 Completadas:
+- [x] **Folder Picker**: Botón "📁 Browse" para seleccionar carpeta
+- [x] **Create Project Button**: Botón en Prompt Studio que usa el prompt como goal
+- [x] **Toast Notifications**: Sistema de notificaciones (success/error/info) con auto-dismiss
+- [x] **Badges de color para tareas**: pending=gray, running=blue, done=green, failed=red, blocked=orange
+- [x] **Indicadores de carga (spinners)**: Para botones durante operaciones
+- [x] **Hover effects**: Animaciones suaves en botones y elementos
+- [x] **Estilos para tree-view**: Explorador de archivos con iconos
+- [x] **Estilos para terminal output**: Panel de logs con colores
+- [x] **Empty states**: Mensajes cuando no hay contenido
+- [x] **Scrollbar personalizado**: Estilo moderno
+
+### ⏳ Pendientes:
+- [ ] Kanban-style columns para tareas
+- [ ] Terminal/Output en tiempo real con WebSocket
+- [ ] Confirmación antes de acciones destructivas
+- [ ] Tooltips explicativos
+- [ ] Atajos de teclado
+
+---
+
+
