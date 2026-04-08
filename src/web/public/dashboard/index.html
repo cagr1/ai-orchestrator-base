@@ -3,19 +3,35 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AgentOS Dashboard</title>
+    <title>OrchestOS Dashboard</title>
     <link rel="stylesheet" href="/assets/dashboard.css" />
     <link rel="stylesheet" href="/assets/dashboard-improvements.css" />
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
   </head>
   <body>
-    <!-- Toast Container -->
-    <div class="toast-container" id="toastContainer"></div>
-    <main class="shell layout">
-      <aside class="sidebar">
+      <!-- Toast Container -->
+      <div class="toast-container" id="toastContainer"></div>
+    
+      <!-- Global Header -->
+      <header class="global-header">
+        <div class="global-brand">
+          <span class="logo">◈</span>
+          <span class="brand-name">OrchestOS</span>
+        </div>
+        <div class="global-controls">
+          <button class="global-btn" id="langToggle" title="Toggle language">
+            <span class="lang-icon">🌐</span>
+            <span id="langLabel">EN</span>
+          </button>
+          <button class="global-btn" id="helpBtn" title="Getting started">?</button>
+        </div>
+      </header>
+
+      <main class="shell layout">
+        <aside class="sidebar">
         <div class="brand">
-          <p class="eyebrow">AgentOS</p>
+          
           <h1 data-i18n="title">Operations Dashboard</h1>
           <p class="muted" data-i18n="subtitle">Control, memory, skills, and execution in one place.</p>
         </div>
@@ -30,11 +46,10 @@
           <button class="nav-item" data-tab="commands" data-i18n="tab_commands">Commands</button>
         </nav>
 
-        <div class="status-card" id="statusCard">
+                <div class="status-card" id="statusCard">
           <p class="label" data-i18n="status">Status</p>
           <p class="value" id="statusValue">Loading...</p>
           <p class="meta" id="statusMeta">-</p>
-          <button class="pill toggle" id="langToggle">EN</button>
         </div>
 
         <div class="panel compact">
@@ -53,7 +68,7 @@
             <p class="muted" id="tabSubtitle">Write or paste your prompts with focus.</p>
           </div>
           <div class="content-actions">
-            <button class="btn ghost" hx-post="/api/v1/execute" hx-swap="none" data-i18n="run">Run</button>
+                <button class="btn ghost" hx-post="/api/v1/execute" hx-swap="none" data-i18n="run" data-tooltip="Execute all pending tasks">Run</button>
             <button class="btn" id="savePromptBtn" data-i18n="save">Save</button>
             <button class="btn primary" id="createProjectBtn" data-i18n="create_project">Create Project</button>
           </div>
@@ -64,31 +79,77 @@
             <div class="panel-header">
               <h2 data-i18n="prompts">Prompt Studio</h2>
             </div>
-            <div class="panel-body">
-              <label class="label" data-i18n="prompt_label">Active Prompt</label>
-              <textarea class="textbox xl" id="promptInput" rows="12" placeholder="Paste or write your prompt here..."></textarea>
-              <div class="hint-row">
-                <span class="muted">Tip: Start with goal → constraints → output format.</span>
+                        <div class="panel-body">
+              
+              <div class="prompt-editor">
+                <textarea class="textbox xl" id="promptInput" rows="12" placeholder="Paste or write your prompt here...&#10;&#10;Press Enter to send, Shift+Enter for new line."></textarea>
+                <div class="prompt-actions">
+                  
+                  <button class="btn primary" id="sendPromptBtn" data-i18n="send">Send</button>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="tab-panel" id="tab-tasks">
-          <div class="grid two">
-            <div class="panel">
-              <div class="panel-header">
-                <h2 data-i18n="tasks">Tasks</h2>
-                <button class="btn" hx-post="/api/v1/execute" hx-swap="none" data-i18n="run">Run</button>
+<section class="tab-panel" id="tab-tasks">
+          <div class="kanban-board">
+            <div class="kanban-column">
+              <div class="kanban-header">
+                <h3>📋 Pending</h3>
+                <span class="kanban-count" id="pendingCount">0</span>
               </div>
-              <div class="panel-body" id="tasksList">
-                <p class="muted" data-i18n="loading">Loading tasks...</p>
+              <div class="kanban-list" id="kanban-pending" data-state="pending">
+                <p class="muted empty-state">No pending tasks</p>
               </div>
             </div>
 
+            <div class="kanban-column">
+              <div class="kanban-header">
+                <h3>⚡ Running</h3>
+                <span class="kanban-count" id="runningCount">0</span>
+              </div>
+              <div class="kanban-list" id="kanban-running" data-state="running">
+                <p class="muted empty-state">No running tasks</p>
+              </div>
+            </div>
+
+            <div class="kanban-column">
+              <div class="kanban-header">
+                <h3>✅ Done</h3>
+                <span class="kanban-count" id="doneCount">0</span>
+              </div>
+              <div class="kanban-list" id="kanban-done" data-state="done">
+                <p class="muted empty-state">No completed tasks</p>
+              </div>
+            </div>
+
+            <div class="kanban-column">
+              <div class="kanban-header">
+                <h3>❌ Failed</h3>
+                <span class="kanban-count" id="failedCount">0</span>
+              </div>
+              <div class="kanban-list" id="kanban-failed" data-state="failed">
+                <p class="muted empty-state">No failed tasks</p>
+              </div>
+            </div>
+
+            <div class="kanban-column">
+              <div class="kanban-header">
+                <h3>🚧 Blocked</h3>
+                <span class="kanban-count" id="blockedCount">0</span>
+              </div>
+              <div class="kanban-list" id="kanban-blocked" data-state="blocked">
+                <p class="muted empty-state">No blocked tasks</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="task-details-panel">
             <div class="panel">
               <div class="panel-header">
                 <h2 data-i18n="details">Details</h2>
+                <button class="btn" hx-post="/api/v1/execute" hx-swap="none" data-i18n="run">Run</button>
               </div>
               <div class="panel-body" id="taskDetails">
                 <p class="muted" data-i18n="select_task">Select a task to see details.</p>
@@ -202,8 +263,8 @@ description: ...
           </div>
         </section>
 
-        <section class="tab-panel" id="tab-stats">
-          <div class="grid two">
+<section class="tab-panel" id="tab-stats">
+          <div class="grid three">
             <div class="panel">
               <div class="panel-header">
                 <h2 data-i18n="controls">Controls</h2>
@@ -249,6 +310,34 @@ description: ...
                 <ul class="feed" id="eventFeed"></ul>
               </div>
             </div>
+
+            <div class="panel terminal-panel">
+              <div class="panel-header">
+                <h2 data-i18n="terminal">Terminal Output</h2>
+                <button class="btn ghost btn-small" id="clearTerminalBtn" data-tooltip="Clear terminal output">Clear</button>
+              </div>
+              <div class="panel-body terminal-body">
+                <div class="terminal-output" id="terminalOutput">
+                  <div class="terminal-line muted">Terminal output will appear here when runner executes...</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Engram Status</h2>
+              </div>
+              <div class="panel-body">
+                <div class="engram-status" id="engramStatus">
+                  <p class="muted">Checking Engram status...</p>
+                </div>
+                <div class="engram-instructions" id="engramInstructions" style="display: none;">
+                  <p class="small muted">Engram provides persistent memory for AI agents. Install it for better memory management.</p>
+                  <button class="btn btn-small" id="installEngramBtn">Install Engram</button>
+                  <button class="btn ghost btn-small" id="testEngramBtn">Test Connection</button>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -273,7 +362,6 @@ description: ...
     <script>
       const statusValue = document.getElementById('statusValue');
       const statusMeta = document.getElementById('statusMeta');
-      const tasksList = document.getElementById('tasksList');
       const taskDetails = document.getElementById('taskDetails');
       const pendingList = document.getElementById('pendingList');
       const pendingCount = document.getElementById('pendingCount');
@@ -283,7 +371,8 @@ description: ...
       const tabPanels = document.querySelectorAll('.tab-panel');
       const tabTitle = document.getElementById('tabTitle');
       const tabSubtitle = document.getElementById('tabSubtitle');
-      const promptInput = document.getElementById('promptInput');
+const promptInput = document.getElementById('promptInput');
+      const sendPromptBtn = document.getElementById('sendPromptBtn');
       const memoryQuery = document.getElementById('memoryQuery');
       const memoryResults = document.getElementById('memoryResults');
       const memorySearchBtn = document.getElementById('memorySearchBtn');
@@ -348,10 +437,11 @@ description: ...
           skill_editor: 'Skill Editor',
           skill_path: 'Skill path',
           load: 'Load',
-          project_files: 'Project Files',
+project_files: 'Project Files',
           file_editor: 'File Editor',
           file_path: 'File path',
-          next_steps: 'Next Steps'
+          next_steps: 'Next Steps',
+          terminal: 'Terminal Output'
         },
         es: {
           title: 'Dashboard Operativo',
@@ -393,10 +483,11 @@ description: ...
           skill_editor: 'Editor de skills',
           skill_path: 'Ruta del skill',
           load: 'Cargar',
-          project_files: 'Archivos del proyecto',
+project_files: 'Archivos del proyecto',
           file_editor: 'Editor de archivos',
           file_path: 'Ruta del archivo',
-          next_steps: 'Pasos sugeridos'
+          next_steps: 'Pasos sugeridos',
+          terminal: 'Salida de Terminal'
         }
       };
 
@@ -418,49 +509,142 @@ description: ...
         setActiveTab(document.querySelector('.nav-item.active')?.dataset.tab || 'prompt');
       });
 
-      const renderTasks = (tasks = []) => {
+const renderTasks = (tasks = []) => {
         if (!tasks.length) {
-          tasksList.innerHTML = `<p class="muted">${i18n[currentLang].loading}</p>`;
-          pendingList.innerHTML = `<p class="muted">${i18n[currentLang].loading}</p>`;
-          pendingCount.textContent = '0';
+          document.querySelectorAll('.kanban-list').forEach(list => {
+            list.innerHTML = '<p class="muted empty-state">Loading tasks...</p>';
+          });
+          document.querySelectorAll('.kanban-count').forEach(count => {
+            count.textContent = '0';
+          });
           return;
         }
-        tasksList.innerHTML = tasks.map(task => {
-          return `
-            <button class="task" data-task-id="${task.id}">
-              <div>
-                <h3>${task.id} · ${task.title}</h3>
-                <p class="muted">${task.description || ''}</p>
-              </div>
-              <span class="task-state ${task.estado}">${task.estado}</span>
-            </button>
-          `;
-        }).join('');
 
-        const pending = tasks.filter(t => t.estado === 'pending');
-        pendingCount.textContent = String(pending.length);
-        pendingList.innerHTML = pending.length
-          ? pending.map(t => `<div class="pending">${t.id} · ${t.title}</div>`).join('')
-          : `<p class="muted">${currentLang === 'en' ? 'No pending tasks.' : 'Sin pendientes.'}</p>`;
+        // Group tasks by state
+        const groups = {
+          pending: tasks.filter(t => t.estado === 'pending'),
+          running: tasks.filter(t => t.estado === 'running'),
+          done: tasks.filter(t => t.estado === 'done'),
+          failed: tasks.filter(t => t.estado === 'failed'),
+          blocked: tasks.filter(t => t.estado === 'blocked')
+        };
 
-        tasksList.querySelectorAll('.task').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const task = tasks.find(t => t.id === btn.dataset.taskId);
-            if (!task) return;
-            taskDetails.innerHTML = `
-              <div class="detail">
-                <h3>${task.id} · ${task.title}</h3>
-                <p class="muted">${task.description || ''}</p>
-                <div class="detail-grid">
-                  <div><span>Skill</span>${task.skill}</div>
-                  <div><span>Estado</span>${task.estado}</div>
-                  <div><span>Prioridad</span>${task.priority}</div>
-                  <div><span>Depends</span>${(task.depends_on || []).join(', ') || '-'}</div>
+        // Update counts
+        document.getElementById('pendingCount').textContent = String(groups.pending.length);
+        document.getElementById('runningCount').textContent = String(groups.running.length);
+        document.getElementById('doneCount').textContent = String(groups.done.length);
+        document.getElementById('failedCount').textContent = String(groups.failed.length);
+        document.getElementById('blockedCount').textContent = String(groups.blocked.length);
+
+        // Render each column
+        Object.entries(groups).forEach(([state, groupTasks]) => {
+          const column = document.getElementById(`kanban-${state}`);
+          if (!column) return;
+
+          if (!groupTasks.length) {
+            column.innerHTML = '<p class="muted empty-state">No tasks</p>';
+            return;
+          }
+
+          column.innerHTML = groupTasks.map(task => {
+            return `
+              <div class="kanban-task" data-task-id="${task.id}" draggable="true">
+                <h4>${task.id} · ${task.title}</h4>
+                <p>${task.description || ''}</p>
+                <div class="task-meta">
+                  <span class="task-id">${task.id}</span>
+                  <span class="task-state ${task.estado}">${task.estado}</span>
                 </div>
               </div>
             `;
+          }).join('');
+
+          // Add click and drag events
+          column.querySelectorAll('.kanban-task').forEach(taskEl => {
+            const taskId = taskEl.dataset.taskId;
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            // Click to show details
+            taskEl.addEventListener('click', () => {
+              taskDetails.innerHTML = `
+                <div class="detail">
+                  <h3>${task.id} · ${task.title}</h3>
+                  <p class="muted">${task.description || ''}</p>
+                  <div class="detail-grid">
+                    <div><span>Skill</span>${task.skill}</div>
+                    <div><span>Estado</span>${task.estado}</div>
+                    <div><span>Prioridad</span>${task.priority}</div>
+                    <div><span>Depends</span>${(task.depends_on || []).join(', ') || '-'}</div>
+                  </div>
+                </div>
+              `;
+            });
+
+            // Drag and drop
+            taskEl.addEventListener('dragstart', (e) => {
+              e.dataTransfer.setData('text/plain', taskId);
+              taskEl.classList.add('dragging');
+            });
+
+            taskEl.addEventListener('dragend', () => {
+              taskEl.classList.remove('dragging');
+            });
           });
         });
+
+        // Make columns droppable
+        document.querySelectorAll('.kanban-list').forEach(column => {
+          column.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            column.classList.add('drag-over');
+          });
+
+          column.addEventListener('dragleave', () => {
+            column.classList.remove('drag-over');
+          });
+
+          column.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            column.classList.remove('drag-over');
+            
+            const taskId = e.dataTransfer.getData('text/plain');
+            const newState = column.dataset.state;
+            
+            if (!taskId || !newState) return;
+
+            // Update task state via API
+            try {
+              const res = await fetch(`/api/v1/tasks/${taskId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado: newState })
+              });
+              
+              if (res.ok) {
+                // Refresh tasks
+                const tasksRes = await fetch('/api/v1/tasks');
+                const updatedTasks = await tasksRes.json();
+                renderTasks(updatedTasks);
+                showToast('Task state updated', 'success');
+              }
+            } catch (err) {
+              showToast('Failed to update task', 'error');
+            }
+          });
+        });
+
+        // Update sidebar pending count
+        const pendingCountEl = document.getElementById('pendingCount');
+        if (pendingCountEl) {
+          pendingCountEl.textContent = String(groups.pending.length);
+        }
+        const pendingListEl = document.getElementById('pendingList');
+        if (pendingListEl) {
+          pendingListEl.innerHTML = groups.pending.length
+            ? groups.pending.map(t => `<div class="pending">${t.id} · ${t.title}</div>`).join('')
+            : `<p class="muted">${currentLang === 'en' ? 'No pending tasks.' : 'Sin pendientes.'}</p>`;
+        }
       };
 
       const renderStatus = (state) => {
@@ -563,7 +747,7 @@ description: ...
         loadFiles();
       };
 
-      const logEvent = (label) => {
+const logEvent = (label) => {
         const item = document.createElement('li');
         item.textContent = `${new Date().toLocaleTimeString()} · ${label}`;
         eventFeed.prepend(item);
@@ -572,22 +756,112 @@ description: ...
         }
       };
 
-      const connectRealtime = () => {
-        const source = new WebSocket(`${location.origin.replace('http', 'ws')}/api/v1/ws`);
-        source.addEventListener('message', (e) => {
-          const msg = JSON.parse(e.data);
-          if (msg.event === 'tasks:updated') {
-            renderTasks(Array.isArray(msg.payload) ? msg.payload : []);
-            logEvent('tasks updated');
-          }
-          if (msg.event === 'status:updated') {
-            renderStatus(msg.payload || {});
-            logEvent('status updated');
-          }
-          if (msg.event === 'run:triggered') logEvent('run triggered');
-          if (msg.event === 'control:updated') logEvent('control updated');
+      const addTerminalOutput = (type, data) => {
+        const terminalOutput = document.getElementById('terminalOutput');
+        if (!terminalOutput) return;
+        
+        const lines = String(data || '').split('\n');
+        lines.forEach(line => {
+          if (line.trim() === '') return;
+          const lineEl = document.createElement('div');
+          lineEl.className = `terminal-line ${type}`;
+          lineEl.textContent = line;
+          terminalOutput.appendChild(lineEl);
         });
+        
+        // Auto-scroll to bottom
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
       };
+
+      const clearTerminal = () => {
+        if (!confirm('Are you sure you want to clear the terminal output?')) {
+          return;
+        }
+        const terminalOutput = document.getElementById('terminalOutput');
+        if (terminalOutput) {
+          terminalOutput.innerHTML = '<div class="terminal-line muted">Terminal output will appear here when runner executes...</div>';
+          showToast('Terminal cleared', 'success');
+        }
+      };
+
+      const checkEngramStatus = async () => {
+        const statusEl = document.getElementById('engramStatus');
+        const instructionsEl = document.getElementById('engramInstructions');
+        
+        try {
+          const res = await fetch('/api/v1/engram/health');
+          const data = await res.json();
+          
+          if (data.ok) {
+            statusEl.innerHTML = '<p class="success">✅ Engram is running</p>';
+            instructionsEl.style.display = 'none';
+          } else {
+            statusEl.innerHTML = '<p class="warning">⚠️ Engram is not responding</p>';
+            instructionsEl.style.display = 'block';
+          }
+        } catch (err) {
+          statusEl.innerHTML = '<p class="error">❌ Engram is not installed or not running</p>';
+          instructionsEl.style.display = 'block';
+        }
+      };
+
+      const installEngram = async () => {
+        try {
+          const res = await fetch('/api/v1/engram/install', { method: 'POST' });
+          const data = await res.json();
+          
+          if (data.ok) {
+            showToast('Engram installation started', 'success');
+            // Check status again after a delay
+            setTimeout(checkEngramStatus, 3000);
+          } else {
+            showToast('Failed to install Engram: ' + (data.error || 'Unknown error'), 'error');
+          }
+        } catch (err) {
+          showToast('Error installing Engram: ' + err.message, 'error');
+        }
+      };
+
+      const testEngramConnection = async () => {
+        try {
+          const res = await fetch('/api/v1/engram/test');
+          const data = await res.json();
+          
+          if (data.ok) {
+            showToast('Engram connection test successful', 'success');
+          } else {
+            showToast('Engram connection failed: ' + (data.error || 'Unknown error'), 'error');
+          }
+        } catch (err) {
+          showToast('Error testing Engram: ' + err.message, 'error');
+        }
+      };
+
+const connectRealtime = () => {
+         const source = new WebSocket(`${location.origin.replace('http', 'ws')}/api/v1/ws`);
+         source.addEventListener('message', (e) => {
+           const msg = JSON.parse(e.data);
+           if (msg.event === 'tasks:updated') {
+             renderTasks(Array.isArray(msg.payload) ? msg.payload : []);
+             logEvent('tasks updated');
+           }
+           if (msg.event === 'status:updated') {
+             renderStatus(msg.payload || {});
+             logEvent('status updated');
+           }
+           if (msg.event === 'terminal:output') {
+             addTerminalOutput(msg.payload.type || 'stdout', msg.payload.data || '');
+           }
+           if (msg.event === 'terminal:closed') {
+             addTerminalOutput('info', `Process exited with code: ${msg.payload.code}`);
+           }
+           if (msg.event === 'terminal:error') {
+             addTerminalOutput('error', `Error: ${msg.payload.error}`);
+           }
+           if (msg.event === 'run:triggered') logEvent('run triggered');
+           if (msg.event === 'control:updated') logEvent('control updated');
+         });
+       };
 
       const setActiveTab = (tab) => {
         tabs.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
@@ -720,9 +994,48 @@ description: ...
         });
       });
 
-      filesRefreshBtn.addEventListener('click', loadFiles);
+filesRefreshBtn.addEventListener('click', loadFiles);
       fileLoadBtn.addEventListener('click', loadFile);
       fileSaveBtn.addEventListener('click', saveFile);
+
+      // Clear terminal button
+      const clearTerminalBtn = document.getElementById('clearTerminalBtn');
+      if (clearTerminalBtn) {
+        clearTerminalBtn.addEventListener('click', clearTerminal);
+      }
+
+      // Engram buttons
+      const installEngramBtn = document.getElementById('installEngramBtn');
+      if (installEngramBtn) {
+        installEngramBtn.addEventListener('click', installEngram);
+      }
+      
+      const testEngramBtn = document.getElementById('testEngramBtn');
+      if (testEngramBtn) {
+        testEngramBtn.addEventListener('click', testEngramConnection);
+      }
+
+      // Send prompt button
+      if (sendPromptBtn) {
+        sendPromptBtn.addEventListener('click', async () => {
+          const prompt = promptInput.value.trim();
+          if (!prompt) return;
+
+          await fetch('/api/v1/prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt })
+          });
+          showToast('Prompt saved', 'success');
+        });
+
+        // Keyboard shortcut: Ctrl+Enter to save prompt
+        promptInput.addEventListener('keydown', (e) => {
+          if (e.ctrlKey && e.key === 'Enter') {
+            sendPromptBtn.click();
+          }
+        });
+      }
 
       applyI18n();
       setActiveTab('prompt');
@@ -730,6 +1043,7 @@ description: ...
       loadSkills();
       loadFiles();
       connectRealtime();
+      checkEngramStatus();
     </script>
   </body>
 </html>

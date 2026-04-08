@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const { createMemoryManager } = require('../../integrations/memory-manager');
 
 const createDashboardService = ({ rootDir, realtime, websocket }) => {
@@ -101,13 +101,32 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
     return task;
   };
 
-  const triggerRun = () => {
+const triggerRun = () => {
     try {
       const { activeRoot } = getPaths();
-      const output = execSync('node runner.js run', { cwd: activeRoot, encoding: 'utf-8' });
-      return { ok: true, output };
+      const child = spawn('node', ['runner.js', 'run'], { cwd: activeRoot });
+      
+      child.stdout.on('data', (data) => {
+        const output = data.toString();
+        broadcast('terminal:output', { type: 'stdout', data: output });
+      });
+      
+      child.stderr.on('data', (data) => {
+        const output = data.toString();
+        broadcast('terminal:output', { type: 'stderr', data: output });
+      });
+      
+      child.on('close', (code) => {
+        broadcast('terminal:closed', { code });
+      });
+      
+      child.on('error', (err) => {
+        broadcast('terminal:error', { error: err.message });
+      });
+      
+      return { ok: true, pid: child.pid, message: 'Runner started' };
     } catch (e) {
-      return { ok: false, output: e.stdout || e.message };
+      return { ok: false, output: e.message };
     }
   };
 

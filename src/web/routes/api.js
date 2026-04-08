@@ -92,7 +92,7 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
     res.json(dashboard.listProjectFiles());
   });
 
-  router.get('/files/read', (req, res) => {
+router.get('/files/read', (req, res) => {
     const rel = String(req.query.path || '');
     res.json(dashboard.readProjectFile(rel));
   });
@@ -100,6 +100,62 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
   router.post('/files/write', (req, res) => {
     const { path: rel, content } = req.body || {};
     res.json(dashboard.writeProjectFile(rel, content));
+  });
+
+  // Engram endpoints
+  router.get('/engram/health', async (req, res) => {
+    try {
+      const { memoryFile, configFile } = dashboard.getPaths?.() || {};
+      const { createMemoryManager } = require('../../integrations/memory-manager');
+      const memoryManager = createMemoryManager({ memoryFile, configFile });
+      const config = memoryManager.getConfig?.();
+      
+      if (config?.provider === 'engram') {
+        const client = memoryManager.getEngramClient?.();
+        if (client) {
+          const health = await client.health();
+          res.json({ ok: health.ok, status: health.status });
+        } else {
+          res.json({ ok: false, error: 'Engram client not available' });
+        }
+      } else {
+        res.json({ ok: false, error: 'Engram not configured as memory provider' });
+      }
+    } catch (err) {
+      res.json({ ok: false, error: err.message });
+    }
+  });
+
+  router.post('/engram/install', (req, res) => {
+    // This would install Engram based on OS
+    // For now, just return instructions
+    const os = process.platform;
+    let instructions = '';
+    
+    if (os === 'darwin') {
+      instructions = 'brew install gentleman-programming/tap/engram';
+    } else if (os === 'linux') {
+      instructions = 'Download binary from GitHub: https://github.com/gentleman-programming/engram/releases';
+    } else if (os === 'win32') {
+      instructions = 'Download .exe from GitHub: https://github.com/gentleman-programming/engram/releases';
+    }
+    
+    res.json({ 
+      ok: true, 
+      message: 'Engram installation instructions',
+      os,
+      instructions 
+    });
+  });
+
+  router.get('/engram/test', async (req, res) => {
+    try {
+      const response = await fetch('http://127.0.0.1:7437/health', { timeout: 3000 });
+      const ok = response.ok;
+      res.json({ ok, status: response.status });
+    } catch (err) {
+      res.json({ ok: false, error: err.message });
+    }
   });
 
   app.use('/api/v1', router);

@@ -13,3 +13,4 @@ system/cost.json
 system/splits/
 _smoke_test_project/
 .env
+opencode.json

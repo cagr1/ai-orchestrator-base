@@ -1,7 +1,14 @@
+/* ============================================
+   DASHBOARD CSS - REFACTORED & ORGANIZED
+   ============================================ */
+
+/* 1. BASE STYLES & RESET
+   ============================================ */
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg: #0f172a;
+  /* Color Palette */
+  --bg: #020d27;
   --panel: #111827;
   --card: #1f2937;
   --text: #e2e8f0;
@@ -9,6 +16,19 @@
   --accent: #38bdf8;
   --accent-soft: rgba(56, 189, 248, 0.15);
   --glow: rgba(56, 189, 248, 0.35);
+  
+  /* Additional variables for compatibility */
+  --bg-primary: #0f172a;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --bg-hover: rgba(56, 189, 248, 0.1);
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: rgba(148, 163, 184, 0.2);
+  --accent-primary: #38bdf8;
+  --accent-glow: rgba(56, 189, 248, 0.3);
+  --success: #22c55e;
 }
 
 * {
@@ -23,8 +43,13 @@ body {
     radial-gradient(circle at 30% 20%, rgba(56, 189, 248, 0.08), transparent 50%);
   color: var(--text);
   min-height: 100vh;
+  overflow: auto;
 }
 
+/* 2. LAYOUT & GRID SYSTEM
+   ============================================ */
+/* 2. LAYOUT & GRID SYSTEM
+   ============================================ */
 .shell {
   max-width: 1200px;
   margin: 0 auto;
@@ -46,10 +71,25 @@ body {
   margin-bottom: 32px;
 }
 
+/* Sidebar */
 .sidebar {
   display: grid;
   gap: 20px;
   align-content: start;
+  background: transparent;
+  border-right: none;
+}
+
+/* 3. TYPOGRAPHY
+   ============================================ */
+h1 {
+  margin: 0;
+  font-size: 38px;
+}
+
+h2 {
+  margin: 0;
+  font-size: 18px;
 }
 
 .brand h1 {
@@ -57,6 +97,27 @@ body {
   font-size: 28px;
 }
 
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* 4. NAVIGATION
+   ============================================ */
 .nav {
   display: grid;
   gap: 8px;
@@ -71,6 +132,12 @@ body {
   text-align: left;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-item:hover {
+  background: rgba(56, 189, 248, 0.1);
+  transform: translateX(4px);
 }
 
 .nav-item.active {
@@ -78,14 +145,31 @@ body {
   box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
 }
 
-.eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.28em;
-  font-size: 12px;
-  color: var(--muted);
-  margin: 0 0 8px;
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
 }
 
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+/* Sidebar */
+.sidebar {
+  display: grid;
+  gap: 20px;
+  align-content: start;
+  background: transparent;
+  border-right: none;
+}
+
+/* 3. TYPOGRAPHY
+   ============================================ */
 h1 {
   margin: 0;
   font-size: 38px;
@@ -96,10 +180,63 @@ h2 {
   font-size: 18px;
 }
 
+.brand h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
 .muted {
   color: var(--muted);
 }
 
+.label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* 4. NAVIGATION
+   ============================================ */
+.nav {
+  display: grid;
+  gap: 8px;
+}
+
+.nav-item {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 12px;
+  text-align: left;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-item:hover {
+  background: rgba(56, 189, 248, 0.1);
+  transform: translateX(4px);
+}
+
+.nav-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+/* 5. COMPONENTS
+   ============================================ */
+
+/* 5.1 Status Card */
 .status-card {
   background: var(--card);
   border: 1px solid rgba(56, 189, 248, 0.2);
@@ -127,6 +264,7 @@ h2 {
   font-size: 12px;
 }
 
+/* 5.2 Grid System */
 .grid {
   display: grid;
   gap: 20px;
@@ -141,6 +279,7 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
+/* 5.3 Panels */
 .panel {
   background: var(--panel);
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -148,6 +287,7 @@ h2 {
   padding: 20px;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
 .panel.compact {
@@ -166,20 +306,67 @@ h2 {
   width: 160px;
   height: 160px;
   background: radial-gradient(circle, var(--glow), transparent 60%);
-  opacity: 0.35;
+  opacity: 0.15;
   pointer-events: none;
 }
 
+/* Panel Header - Compact & Consistent */
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  padding: 12px 16px;
+  min-height: 48px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.panel-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-header .btn,
+.panel-header button {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  margin: 0;
+}
+
+.panel-header .btn.ghost {
+  height: 32px;
+  padding: 6px 12px;
+}
+
+.panel-header .pill {
+  flex-shrink: 0;
+  height: 24px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
 }
 
 .panel-body {
   display: grid;
   gap: 12px;
+  padding: 0 16px 16px;
 }
 
 .checklist label {
@@ -197,6 +384,7 @@ h2 {
   color: var(--muted);
 }
 
+/* 5.4 Content Area */
 .content {
   display: grid;
   gap: 20px;
@@ -207,10 +395,23 @@ h2 {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(15, 23, 42, 0.7);
   border-radius: 16px;
   padding: 16px 20px;
   border: 1px solid rgba(148, 163, 184, 0.2);
+  backdrop-filter: blur(10px);
+  min-height: 60px;
+}
+
+.content-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.content-header .muted {
+  font-size: 13px;
+  margin-top: 4px;
 }
 
 .content-actions {
@@ -218,6 +419,13 @@ h2 {
   gap: 10px;
 }
 
+.content-actions .btn {
+  height: 36px;
+  padding: 8px 16px;
+  border-radius: 10px;
+}
+
+/* 5.5 Tasks */
 .task {
   display: flex;
   justify-content: space-between;
@@ -234,8 +442,10 @@ h2 {
 .task:hover {
   transform: translateY(-2px);
   border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.15);
 }
 
+/* 5.6 Pills & Badges */
 .pill {
   padding: 4px 10px;
   border-radius: 999px;
@@ -252,6 +462,7 @@ h2 {
   cursor: pointer;
 }
 
+/* 5.7 Buttons */
 .btn {
   background: var(--accent);
   color: #0f172a;
@@ -260,6 +471,12 @@ h2 {
   border-radius: 10px;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
 }
 
 .btn.ghost {
@@ -268,10 +485,21 @@ h2 {
   color: var(--accent);
 }
 
-.btn:hover {
-  filter: brightness(1.05);
+.btn.primary {
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  color: white;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(56, 189, 248, 0.3);
 }
 
+.btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(56, 189, 248, 0.4);
+}
+
+/* 5.8 Form Controls */
 .control-form {
   display: grid;
   gap: 12px;
@@ -299,8 +527,35 @@ h2 {
 }
 
 .textbox.xl {
-  min-height: 280px;
+  min-height: 360px;
   font-size: 15px;
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(11, 18, 32, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  line-height: 1.6;
+  transition: all 0.2s ease;
+}
+
+.textbox.xl:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+  outline: none;
+}
+
+/* Prompt Editor */
+.prompt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .hint-row {
@@ -321,8 +576,15 @@ h2 {
   padding: 6px 10px;
   border-radius: 8px;
   background: rgba(148, 163, 184, 0.1);
+  transition: all 0.2s ease;
 }
 
+.pending:hover {
+  background: rgba(56, 189, 248, 0.15);
+  transform: translateX(4px);
+}
+
+/* 5.9 Detail Components */
 .detail h3 {
   margin-top: 0;
 }
@@ -358,6 +620,7 @@ h2 {
   font-size: 13px;
 }
 
+/* 5.10 Tab Panels */
 .tab-panel {
   display: none;
 }
@@ -366,13 +629,158 @@ h2 {
   display: block;
 }
 
+/* 6. GLOBAL HEADER
+   ============================================ */
+.global-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+  z-index: 100;
+}
+
+.global-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.global-brand .logo {
+  font-size: 24px;
+  color: #38bdf8;
+}
+
+.global-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.global-btn {
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.global-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  transform: translateY(-2px);
+}
+
+#helpBtn {
+  font-weight: bold;
+  font-size: 18px;
+}
+
+/* Adjust main content for fixed header */
+.shell {
+  padding-top: 80px !important;
+}
+
+/* 7. ANIMATIONS & UTILITIES
+   ============================================ */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@media (max-width: 720px) {
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(148, 163, 184, 0.3);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
+.spinner.sm { width: 12px; height: 12px; border-width: 1.5px; }
+.spinner.lg { width: 24px; height: 24px; border-width: 3px; }
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.5);
+}
+
+/* 8. RESPONSIVE DESIGN
+   ============================================ */
+@media (max-width: 768px) {
   .layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  
+  .global-header {
+    padding: 10px 16px !important;
+  }
+  
+  .global-btn {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  
+  .panel {
+    padding: 12px !important;
+  }
+  
+  .panel .panel-header {
+    padding: 10px 14px !important;
+    min-height: 44px !important;
+  }
+  
+  .prompt-editor .textbox.xl {
+    min-height: 280px !important;
+  }
+  
+  .content-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    padding: 14px !important;
+  }
+  
+  .content-actions {
+    width: 100% !important;
+    justify-content: flex-start !important;
   }
 }
+   
+
