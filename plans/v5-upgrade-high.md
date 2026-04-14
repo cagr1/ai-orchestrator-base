@@ -519,7 +519,7 @@ agentos dashboard  # Abre http://localhost:3000
 - [x] **Estilos para terminal output**: Panel de logs con colores
 - [x] **Empty states**: Mensajes cuando no hay contenido
 - [x] **Scrollbar personalizado**: Estilo moderno
-- [ ] **PENDIENTE**: Terminal/Output en tiempo real con WebSocket (funcional)
+- [x] **COMPLETADO (2026-04-14)**: Terminal/Output en tiempo real con WebSocket (funcional, movido a Prompt Studio)
 - [ ] **PENDIENTE**: Kanban-style columns para tareas (drag & drop)
 - [ ] **PENDIENTE**: Confirmación antes de acciones destructivas
 - [ ] **PENDIENTE**: Tooltips explicativos
@@ -586,7 +586,7 @@ agentos dashboard  # Abre http://localhost:3000
 
 ### **Pendiente crítico:**
 - 🔄 Integración completa Engram ↔ Dashboard
-- 🔄 WebSockets realtime funcional (terminal output)
+- ✅ WebSockets realtime funcional (terminal output en Prompt Studio — 2026-04-14)
 - 🔄 Kanban columns drag & drop
 - 🔄 Auto-instalación multi-OS
 - 🔄 Renaming a OrchestOS
@@ -595,7 +595,7 @@ agentos dashboard  # Abre http://localhost:3000
 
 **Fecha objetivo**: OrchestOS v5.1.0 en 7 días  
 **Equipo**: Carlos (dev) + AI Assistant  
-**Estado**: Dashboard 90% completado, integraciones en progreso
+**Estado**: Dashboard 95% completado — v6-improvement completado el 2026-04-14 (tests 100%, CSS limpio, assets locales, terminal en Prompt Studio)
 
 ---
 
@@ -646,9 +646,15 @@ npm run dashboard  # o `orchestos dashboard` en futuro
 - [x] **Empty states**: Mensajes cuando no hay contenido
 - [x] **Scrollbar personalizado**: Estilo moderno
 
+### ✅ Completadas en sesión v6 (2026-04-14):
+- [x] `npm test` pasa al 100% — fix en `memory-manager.js` (appendWithCompaction síncrono) + fix path con espacios en CLI tests
+- [x] CSS duplicado eliminado (`dashboard.css` 786→691 líneas, sin bloques repetidos)
+- [x] Shell padding consolidado (sin `!important` redundante)
+- [x] Assets locales: CDN `unpkg.com` reemplazado por `/assets/htmx.min.js` y `/assets/_hyperscript.min.js`
+- [x] Terminal/Output en tiempo real con WebSocket (movido a Prompt Studio)
+
 ### ⏳ Pendientes:
 - [ ] Kanban-style columns para tareas
-- [ ] Terminal/Output en tiempo real con WebSocket
 - [ ] Confirmación antes de acciones destructivas
 - [ ] Tooltips explicativos
 - [ ] Atajos de teclado

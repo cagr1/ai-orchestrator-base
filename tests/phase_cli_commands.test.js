@@ -75,15 +75,18 @@ function restoreSystem(snapshot) {
 }
 
 function run(cmd) {
-  execSync(cmd, { stdio: 'ignore' });
+  execSync(cmd, { stdio: 'ignore', cwd: ROOT });
 }
+
+// Quote path to handle directories with spaces
+const RUNNER_QUOTED = `"${RUNNER}"`;
 
 console.log('Testing Phase CLI Commands...');
 
 const snapshot = backupSystem();
 try {
-  run(`node ${RUNNER} init "CLI Test"`);
-  run(`node ${RUNNER} plan "Add login module"`);
+  run(`node ${RUNNER_QUOTED} init "CLI Test"`);
+  run(`node ${RUNNER_QUOTED} plan "Add login module"`);
 
   const planRequest = readIfExists(path.join(SYSTEM, 'plan_request.md'));
   assert(planRequest && planRequest.includes('Add login module'), 'plan_request.md should include latest request');
@@ -124,7 +127,7 @@ metadata:
   }
   fs.writeFileSync(path.join(ROOT, 'demo', 'cli-test.txt'), 'ok', 'utf-8');
 
-  run(`node ${RUNNER} done T1 demo/cli-test.txt`);
+  run(`node ${RUNNER_QUOTED} done T1 demo/cli-test.txt`);
 
   const updated = readIfExists(path.join(SYSTEM, 'tasks.yaml'));
   assert(updated && updated.includes('estado: done'), 'Task should be marked done');
@@ -132,7 +135,7 @@ metadata:
   const evidenceFile = readIfExists(path.join(EVIDENCE_DIR, 'T1.json'));
   assert(evidenceFile && evidenceFile.includes('demo/cli-test.txt'), 'Evidence should reference demo/cli-test.txt');
 
-  run(`node ${RUNNER} verify`);
+  run(`node ${RUNNER_QUOTED} verify`);
 
   console.log('✓ CLI commands work (plan, done, evidence, verify)');
 } finally {

@@ -14,3 +14,6 @@ system/splits/
 _smoke_test_project/
 .env
 opencode.json
+system/dashboard.json
+.claude/
+demo/

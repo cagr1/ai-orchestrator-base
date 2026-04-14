@@ -75,15 +75,18 @@ function restoreSystem(snapshot) {
 }
 
 function run(cmd) {
-  execSync(cmd, { stdio: 'ignore' });
+  execSync(cmd, { stdio: 'ignore', cwd: ROOT });
 }
+
+// Quote path to handle directories with spaces
+const RUNNER_QUOTED = `"${RUNNER}"`;
 
 console.log('Testing Phase SDD Full Flow...');
 
 const snapshot = backupSystem();
 try {
-  run(`node ${RUNNER} init "SDD Flow Test"`);
-  run(`node ${RUNNER} plan "Create login module"`);
+  run(`node ${RUNNER_QUOTED} init "SDD Flow Test"`);
+  run(`node ${RUNNER_QUOTED} plan "Create login module"`);
 
   const plan = `
 # Plan
@@ -154,14 +157,14 @@ metadata:
   }
   fs.writeFileSync(path.join(ROOT, 'demo', 'sdd-ux.md'), 'ux', 'utf-8');
 
-  run(`node ${RUNNER} run`);
-  run(`node ${RUNNER} done T1 demo/sdd-ux.md`);
+  run(`node ${RUNNER_QUOTED} run`);
+  run(`node ${RUNNER_QUOTED} done T1 demo/sdd-ux.md`);
 
   fs.writeFileSync(path.join(ROOT, 'demo', 'sdd-auth.md'), 'auth', 'utf-8');
-  run(`node ${RUNNER} run`);
-  run(`node ${RUNNER} done T2 demo/sdd-auth.md`);
+  run(`node ${RUNNER_QUOTED} run`);
+  run(`node ${RUNNER_QUOTED} done T2 demo/sdd-auth.md`);
 
-  run(`node ${RUNNER} run`);
+  run(`node ${RUNNER_QUOTED} run`);
 
   const state = JSON.parse(readIfExists(path.join(SYSTEM, 'state.json')));
   assert(state.status === 'completed', 'Flow should complete');

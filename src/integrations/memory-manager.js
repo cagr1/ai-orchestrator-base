@@ -154,6 +154,13 @@ const createMemoryManager = ({ memoryFile, configFile }) => {
     const engram = getEngramConfig();
     const provider = memory?.provider || 'file';
 
+    // Always write to file synchronously first (primary storage)
+    append(content);
+    if (shouldCompact()) {
+      compact();
+    }
+
+    // If engram is configured, also mirror async (best-effort, non-blocking)
     if (provider === 'engram') {
       const client = getEngramClient();
       if (client) {
@@ -164,30 +171,12 @@ const createMemoryManager = ({ memoryFile, configFile }) => {
           return client.addObservation(deriveObservation(content));
         }).then((res) => {
           if (!res.ok) {
-            console.log(`[ENGRAM] Append failed (${res.status}), using file fallback`);
-            if (engram?.fallback_to_file !== false) {
-              append(content);
-              if (shouldCompact()) {
-                compact();
-              }
-            }
+            console.log(`[ENGRAM] Mirror failed (${res.status})`);
           }
         }).catch(() => {
-          console.log('[ENGRAM] Append error, using file fallback');
-          if (engram?.fallback_to_file !== false) {
-            append(content);
-            if (shouldCompact()) {
-              compact();
-            }
-          }
+          // Engram mirror failed silently — file already written above
         });
-        return;
       }
-    }
-
-    append(content);
-    if (shouldCompact()) {
-      compact();
     }
   };
 

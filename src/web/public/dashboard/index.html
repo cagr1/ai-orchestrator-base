@@ -6,8 +6,8 @@
     <title>OrchestOS Dashboard</title>
     <link rel="stylesheet" href="/assets/dashboard.css" />
     <link rel="stylesheet" href="/assets/dashboard-improvements.css" />
-    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-    <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+    <script src="/assets/htmx.min.js"></script>
+    <script src="/assets/_hyperscript.min.js"></script>
   </head>
   <body>
       <!-- Toast Container -->
@@ -87,6 +87,18 @@
                   
                   <button class="btn primary" id="sendPromptBtn" data-i18n="send">Send</button>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel terminal-panel">
+            <div class="panel-header">
+              <h2 data-i18n="terminal">Terminal Output</h2>
+              <button class="btn ghost btn-small" id="clearTerminalBtn" data-tooltip="Clear terminal output">Clear</button>
+            </div>
+            <div class="panel-body terminal-body">
+              <div class="terminal-output" id="terminalOutput">
+                <div class="terminal-line muted">Terminal output will appear here when runner executes...</div>
               </div>
             </div>
           </div>
@@ -308,18 +320,6 @@ description: ...
               </div>
               <div class="panel-body">
                 <ul class="feed" id="eventFeed"></ul>
-              </div>
-            </div>
-
-            <div class="panel terminal-panel">
-              <div class="panel-header">
-                <h2 data-i18n="terminal">Terminal Output</h2>
-                <button class="btn ghost btn-small" id="clearTerminalBtn" data-tooltip="Clear terminal output">Clear</button>
-              </div>
-              <div class="panel-body terminal-body">
-                <div class="terminal-output" id="terminalOutput">
-                  <div class="terminal-line muted">Terminal output will appear here when runner executes...</div>
-                </div>
               </div>
             </div>
 
