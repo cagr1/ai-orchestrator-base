@@ -12,7 +12,60 @@ const detectTier = (goal, skillTriggers = {}) => {
   return 'basic';
 };
 
-const buildPrompt = ({ goal, tier, skills, runId, iteration, now }) => `You are a software project planner. Your job is to break down a goal into concrete tasks.
+const detectProjectSignals = (rootDir) => {
+  const signals = [];
+  const patterns = [
+    { file: 'package.json', type: 'node' },
+    { file: 'package-lock.json', type: 'node' },
+    { file: '*.csproj', type: 'dotnet' },
+    { file: '*.sln', type: 'dotnet' },
+    { file: 'composer.json', type: 'php' },
+    { file: 'requirements.txt', type: 'python' },
+    { file: 'pyproject.toml', type: 'python' },
+    { file: 'Gemfile', type: 'ruby' },
+    { file: 'go.mod', type: 'go' },
+    { file: 'Cargo.toml', type: 'rust' }
+  ];
+
+  try {
+    const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+    const files = entries.filter(e => e.isFile()).map(e => e.name);
+    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+
+    if (files.includes('package.json') || files.includes('package-lock.json')) signals.push('node');
+    if (dirs.includes('node_modules')) signals.push('node');
+    if (files.some(f => f.endsWith('.csproj'))) signals.push('dotnet');
+    if (files.some(f => f.endsWith('.sln'))) signals.push('dotnet');
+    if (files.includes('composer.json')) signals.push('php');
+    if (files.includes('requirements.txt')) signals.push('python');
+    if (files.includes('pyproject.toml')) signals.push('python');
+    if (files.includes('Gemfile')) signals.push('ruby');
+    if (files.includes('go.mod')) signals.push('go');
+    if (files.includes('Cargo.toml')) signals.push('rust');
+  } catch (e) {
+    // directory read failed, no signals
+  }
+
+  return signals;
+};
+
+const getFileList = (rootDir, maxFiles = 100) => {
+  const result = [];
+  try {
+    const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (result.length >= maxFiles) break;
+      if (entry.isFile()) {
+        result.push(entry.name);
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return result;
+};
+
+const buildPrompt = ({ goal, tier, skills, runId, iteration, now, existingProject, projectContext }) => `You are a software project planner. Your job is to break down a goal into concrete tasks.
 
 GOAL: ${goal}
 
@@ -21,6 +74,8 @@ AVAILABLE SKILLS (use ONLY these): ${skills.join(', ')}
 RUN ID: ${runId}
 ITERATION: ${iteration}
 TIMESTAMP: ${now}
+EXISTING PROJECT: ${existingProject}
+${projectContext}
 
 INSTRUCTIONS:
 - Return ONLY a valid YAML block, no explanation, no markdown prose.
@@ -75,7 +130,20 @@ const generateTasks = async ({ goal, systemDir, config, state }) => {
     || 'free_advanced';
   const model = (providerCfg.models || {})[modelKey] || (providerCfg.models || {}).free_advanced || 'google/gemma-2-2b-it';
 
-  const prompt = buildPrompt({ goal, tier, skills, runId, iteration, now });
+  const rootDir = config.system_root_dir || systemDir;
+  const projectSignals = detectProjectSignals(rootDir);
+  const existingProject = projectSignals.length > 0;
+  let projectContext = '';
+
+  if (existingProject) {
+    const fileList = getFileList(rootDir);
+    const completed = state.completed_tasks || [];
+    projectContext = `PROJECT SIGNALS: ${projectSignals.join(', ')}
+CURRENT FILES (${fileList.length}): ${fileList.slice(0, 100).join(', ')}
+COMPLETED TASKS: ${completed.map(t => t.title || t.id).join(', ') || 'none'}`;
+  }
+
+  const prompt = buildPrompt({ goal, tier, skills, runId, iteration, now, existingProject, projectContext });
 
   let rawOutput;
   try {
