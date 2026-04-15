@@ -1,4 +1,4 @@
-const callOpenRouter = async (prompt, config, skill = null) => {
+const callOpenRouter = async (prompt, config, skill = null, context = {}) => {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is not set');
@@ -17,6 +17,11 @@ const callOpenRouter = async (prompt, config, skill = null) => {
   if (!model) {
     throw new Error(`Model ${modelKey} not configured for provider ${config.active_provider}`);
   }
+
+  const taskId = context.taskId || 'unknown';
+  const runId = context.runId || 'unknown';
+  const promptLen = String(prompt || '').length;
+  console.log(`[LLM START] run_id=${runId} task_id=${taskId} skill=${skill || 'none'} model_key=${modelKey} model=${model} prompt_len=${promptLen}`);
 
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -42,9 +47,37 @@ const callOpenRouter = async (prompt, config, skill = null) => {
     }
 
     const data = JSON.parse(responseText);
-    return data?.choices?.[0]?.message?.content;
+    const content = data?.choices?.[0]?.message?.content;
+    const contentType = Array.isArray(content) ? 'array' : typeof content;
+    const contentLen = typeof content === 'string'
+      ? content.length
+      : Array.isArray(content)
+      ? content.length
+      : 0;
+    console.log(`[LLM END] run_id=${runId} task_id=${taskId} skill=${skill || 'none'} content_type=${contentType} content_len=${contentLen}`);
+
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      const normalized = content
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (part && typeof part.text === 'string') return part.text;
+          return '';
+        })
+        .join('');
+      if (normalized.trim()) {
+        return normalized;
+      }
+    }
+
+    const choice = data?.choices?.[0];
+    const finishReason = choice?.finish_reason || 'unknown';
+    throw new Error(`OpenRouter returned empty assistant content (run_id=${runId} task_id=${taskId} skill=${skill || 'none'} finish_reason=${finishReason})`);
   } catch (err) {
-    console.error('OpenRouter fetch error:', err.message);
+    console.error(`OpenRouter fetch error [run_id=${runId} task_id=${taskId} skill=${skill || 'none'}]:`, err.message);
     throw err;
   }
 };

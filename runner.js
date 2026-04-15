@@ -122,6 +122,76 @@ const snapshotOutputFileHashes = (relativePaths = []) => {
 const getChangedOutputPaths = (beforeSnapshot = {}, afterSnapshot = {}) =>
   Object.keys(afterSnapshot).filter((relativePath) => beforeSnapshot[relativePath] !== afterSnapshot[relativePath] && afterSnapshot[relativePath] !== null);
 
+const resolveModelForSkill = (config, skill) => {
+  const provider = config?.active_provider;
+  const providerConfig = config?.providers?.[provider];
+  const modelKey = config?.model_mapping?.[skill] || config?.model_mapping?.default;
+  const model = providerConfig?.models?.[modelKey];
+  return { modelKey: modelKey || 'unknown', model: model || 'unknown' };
+};
+
+const parseFinishReason = (message) => {
+  const match = String(message || '').match(/finish_reason=([^) \n]+)/);
+  return match ? match[1] : null;
+};
+
+const inspectJsonStructure = (text) => {
+  const source = String(text || '');
+  const trimmed = source.trimStart();
+  const startsLikeJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+  if (!startsLikeJson) {
+    return { startsLikeJson: false, structurallyComplete: false };
+  }
+
+  const stack = [];
+  let inString = false;
+  let escaping = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+
+    if (inString) {
+      if (escaping) {
+        escaping = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaping = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === '{' || ch === '[') {
+      stack.push(ch);
+      continue;
+    }
+
+    if (ch === '}' || ch === ']') {
+      if (stack.length === 0) {
+        return { startsLikeJson: true, structurallyComplete: false };
+      }
+      const open = stack.pop();
+      if ((open === '{' && ch !== '}') || (open === '[' && ch !== ']')) {
+        return { startsLikeJson: true, structurallyComplete: false };
+      }
+    }
+  }
+
+  return {
+    startsLikeJson: true,
+    structurallyComplete: !inString && !escaping && stack.length === 0
+  };
+};
+
 const redactText = (text, config) => {
   const enabled = config?.redaction?.enabled !== false;
   if (!enabled || !text) return text || '';
@@ -610,8 +680,8 @@ const buildExecutionPrompt = (task) => {
   return promptParts.join('\n');
 };
 
-const runLLM = async (prompt, config, skill = null) => {
-  return await callOpenRouter(prompt, config, skill);
+const runLLM = async (prompt, config, skill = null, context = {}) => {
+  return await callOpenRouter(prompt, config, skill, context);
 };
 
 // ============================================================
@@ -801,7 +871,8 @@ const updateTaskMetadata = (tasks) => {
     completed: taskList.filter(t => t.estado === "done").length,
     pending: taskList.filter(t => t.estado === "pending").length,
     failed: taskList.filter(t => t.estado === "failed").length,
-    blocked: taskList.filter(t => t.estado === "blocked").length
+    blocked: taskList.filter(t => t.estado === "blocked").length,
+    split_required: taskList.filter(t => t.estado === "split_required").length
   };
 };
 
@@ -1629,8 +1700,8 @@ const recalculateTaskStates = (tasks) => {
   );
   
   tasks.forEach(task => {
-    // Never change done or failed
-    if (task.estado === "done" || task.estado === "failed") {
+    // Never change done, failed, or split_required
+    if (task.estado === "done" || task.estado === "failed" || task.estado === "split_required") {
       return;
     }
     
@@ -1826,6 +1897,7 @@ const main = async () => {
       console.log(`[${command.toUpperCase()}] Starting execution...`);
       console.log(`[STATE] Phase: ${state.phase}`);
       console.log(`[STATE] Iteration: ${state.iteration}/${state.max_iterations}`);
+      console.log(`[RUNNER START] pid=${process.pid} run_id=${state.run_id || 'unknown'} command=${command} root=${ROOT_DIR}`);
       appendEvent('run_start', { run_id: state.run_id, phase: state.phase, iteration: state.iteration });
       applyRetentionPolicies();
 
@@ -1974,20 +2046,94 @@ const main = async () => {
       });
 
       let anyTaskUpdated = false;
+      let hardFailure = null;
       if (AUTO_EXECUTE) {
         
         for (const task of batch) {
+          const execCtx = `pid=${process.pid} run_id=${state.run_id || 'unknown'} task_id=${task.id}`;
+
+          // SIZING GATE: tasks annotated sizing_risk=must_split never reach the provider.
+          // This is a planning-level block, not an execution failure.
+          if (task.sizing_risk === 'must_split') {
+            const evidenceDir = path.join(SYSTEM_DIR, 'evidence');
+            ensureDir(evidenceDir);
+            fs.writeFileSync(
+              path.join(evidenceDir, `${task.id}.failure.json`),
+              JSON.stringify({
+                task_id: task.id,
+                run_id: state.run_id || 'unknown',
+                stage: 'sizing_gate',
+                error_class: 'sizing_gate_blocked',
+                error_message: `Task ${task.id} has sizing_risk=must_split — blocked before provider call`,
+                sizing_risk: task.sizing_risk,
+                timestamp: new Date().toISOString()
+              }, null, 2),
+              'utf-8'
+            );
+            console.error(`[SIZING GATE] Task ${task.id} blocked — sizing_risk=must_split, no provider call made`);
+            updateTask(tasksDoc, task.id, { estado: 'split_required', block_reason: 'sizing_risk:must_split' });
+            anyTaskUpdated = true;
+            hardFailure = {
+              taskId: task.id,
+              failureClass: 'sizing_gate_blocked',
+              message: `Task ${task.id} has sizing_risk=must_split and must be split before execution`,
+              haltReason: `batch_stopped_on_sizing_gate:${task.id}`
+            };
+            break;
+          }
+
+          let stage = 'provider_call';
+          let promptLen = 0;
+          let rawType = 'undefined';
+          let rawLen = 0;
+          let rawPreview = '';
+          let parseStarted = false;
           try {
-            console.log(`[EXEC] Running task ${task.id}`);
+            console.log(`[EXEC] Running task ${task.id} (${execCtx})`);
             const prompt = buildExecutionPrompt(task);
-            const llmOutput = await runLLM(prompt, runtimeConfig, task.skill);
+            promptLen = prompt.length;
+            console.log(`[LLM DISPATCH] ${execCtx} skill=${task.skill || 'none'} prompt_len=${prompt.length}`);
+            const llmOutput = await runLLM(prompt, runtimeConfig, task.skill, {
+              taskId: task.id,
+              runId: state.run_id || 'unknown'
+            });
+            console.log(`[LLM RESULT] ${execCtx} raw_type=${typeof llmOutput} raw_len=${typeof llmOutput === 'string' ? llmOutput.length : 0}`);
             const rawOutput = llmOutput || '';
+            stage = 'pre_parse';
+            rawType = typeof llmOutput;
+            rawLen = typeof llmOutput === 'string' ? llmOutput.length : 0;
+            rawPreview = typeof llmOutput === 'string' ? llmOutput.slice(0, 300) : '';
+            if (!rawOutput.trim()) {
+              const evidenceDir = path.join(SYSTEM_DIR, 'evidence');
+              ensureDir(evidenceDir);
+              const errorMsg = `Empty model response for task ${task.id} (${execCtx})`;
+              const errData = {
+                task_id: task.id,
+                error: errorMsg,
+                truncated: false,
+                raw_len: rawOutput.length,
+                pid: process.pid,
+                run_id: state.run_id || 'unknown'
+              };
+              fs.writeFileSync(
+                path.join(evidenceDir, `${task.id}.parse-error.json`),
+                JSON.stringify(errData, null, 2),
+                'utf-8'
+              );
+              console.error(`[EXEC PARSE FAIL] ${task.id}: ${errorMsg}`);
+              throw new Error(errorMsg);
+            }
 
             // 1. Persist raw output unconditionally before any parsing attempt.
             const evidenceDir = path.join(SYSTEM_DIR, 'evidence');
             ensureDir(evidenceDir);
             fs.writeFileSync(
               path.join(evidenceDir, `${task.id}.raw.txt`),
+              rawOutput,
+              'utf-8'
+            );
+            fs.writeFileSync(
+              path.join(evidenceDir, `${task.id}.raw.pid-${process.pid}.txt`),
               rawOutput,
               'utf-8'
             );
@@ -2001,40 +2147,34 @@ const main = async () => {
             const lastBrace  = fenceStripped.lastIndexOf('}');
 
             // DEBUG: log parse context to diagnose failures
-            console.log(`[DEBUG PARSE] task=${task.id} rawLen=${rawOutput.length} fenceLen=${fenceStripped.length}`);
+            console.log(`[DEBUG PARSE] ${execCtx} rawLen=${rawOutput.length} fenceLen=${fenceStripped.length}`);
             console.log(`[DEBUG PARSE] rawFirst100=${JSON.stringify(rawOutput.slice(0, 100))}`);
             console.log(`[DEBUG PARSE] rawLast100=${JSON.stringify(rawOutput.slice(-100))}`);
             console.log(`[DEBUG PARSE] firstBrace=${firstBrace} lastBrace=${lastBrace}`);
 
-            let candidate;
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
-              candidate = fenceStripped.slice(firstBrace, lastBrace + 1).trim();
-            } else {
-              // Fallback: fence-stripping may have displaced brace indices (e.g. preamble
-              // `}` before the JSON, or stray fence chars). Scan rawOutput directly with
-              // a greedy regex — identical to the recovery path the old parser used.
-              console.log(`[DEBUG PARSE] primary brace detection failed (firstBrace=${firstBrace} lastBrace=${lastBrace}), trying fallback regex on rawOutput`);
-              const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
-              if (!jsonMatch) {
-                const errData = {
-                  task_id: task.id,
-                  error: 'No JSON object delimiters found in LLM output',
-                  raw_snippet: rawOutput.slice(0, 300),
-                  debug: { rawLen: rawOutput.length, fenceLen: fenceStripped.length, firstBrace, lastBrace }
-                };
-                fs.writeFileSync(
-                  path.join(evidenceDir, `${task.id}.parse-error.json`),
-                  JSON.stringify(errData, null, 2),
-                  'utf-8'
-                );
-                console.error(`[EXEC PARSE FAIL] ${task.id}: ${errData.error}`);
-                throw new Error(errData.error);
-              }
-              console.log(`[DEBUG PARSE] fallback matched at index=${jsonMatch.index} len=${jsonMatch[0].length}`);
-              candidate = jsonMatch[0];
+            if (firstBrace === -1) {
+              const errData = {
+                task_id: task.id,
+                error: 'No JSON object start found in LLM output',
+                truncated: false,
+                raw_snippet: rawOutput.slice(0, 300),
+                debug: { rawLen: rawOutput.length, fenceLen: fenceStripped.length, firstBrace, lastBrace }
+              };
+              fs.writeFileSync(
+                path.join(evidenceDir, `${task.id}.parse-error.json`),
+                JSON.stringify(errData, null, 2),
+                'utf-8'
+              );
+              console.error(`[EXEC PARSE FAIL] ${task.id}: ${errData.error}`);
+              throw new Error(errData.error);
             }
+            const candidate = (lastBrace !== -1 && lastBrace >= firstBrace)
+              ? fenceStripped.slice(firstBrace, lastBrace + 1).trim()
+              : fenceStripped.slice(firstBrace).trim();
+            const candidateStructure = inspectJsonStructure(candidate);
 
-            // 3. Parse — with one minimal recovery pass for trailing commas.
+            // 3. Parse - with one minimal recovery pass for trailing commas.
+            parseStarted = true;
             let parsed;
             try {
               parsed = JSON.parse(candidate);
@@ -2044,10 +2184,8 @@ const main = async () => {
               try {
                 parsed = JSON.parse(recovered);
               } catch (e2) {
-                // Detect truncation: valid JSON starts with '{' but token limit cut it
-                // off before the closing '}' was emitted.
-                const isTruncated = candidate.trimStart().startsWith('{') &&
-                                    !candidate.trimEnd().endsWith('}');
+                const isTruncated = candidateStructure.startsLikeJson &&
+                                    !candidateStructure.structurallyComplete;
                 const errorMsg = isTruncated
                   ? `LLM output truncated or incomplete for task ${task.id}`
                   : `JSON parse failed for task ${task.id}: ${e2.message}`;
@@ -2055,7 +2193,9 @@ const main = async () => {
                   task_id: task.id,
                   error: errorMsg,
                   truncated: isTruncated,
-                  raw_snippet: rawOutput.slice(0, 500)
+                  parse_error: e2.message,
+                  raw_snippet: rawOutput.slice(0, 500),
+                  candidate_snippet: candidate.slice(0, 500)
                 };
                 fs.writeFileSync(
                   path.join(evidenceDir, `${task.id}.parse-error.json`),
@@ -2075,6 +2215,24 @@ const main = async () => {
             const declaredOutputPaths = Array.isArray(task.output) ? task.output.filter(Boolean) : [];
             if (declaredOutputPaths.length === 0) {
               throw new Error(`Task ${task.id} has no declared output files to verify`);
+            }
+            const validWritableFiles = parsed.files.filter((file) => (
+              file &&
+              typeof file.path === 'string' &&
+              file.path.trim().length > 0 &&
+              typeof file.content === 'string' &&
+              file.content.trim().length > 0
+            ));
+            if (validWritableFiles.length === 0) {
+              throw new Error(`Output insufficiency for task ${task.id}: parsed.files contains no valid writable path/content pairs`);
+            }
+            const invalidDeclaredOutputs = parsed.files.filter((file) => (
+              file &&
+              declaredOutputPaths.includes(file.path) &&
+              !(typeof file.content === 'string' && file.content.trim().length > 0)
+            ));
+            if (invalidDeclaredOutputs.length > 0) {
+              throw new Error(`Output insufficiency for task ${task.id}: declared output has unusable content`);
             }
             const beforeOutputSnapshot = snapshotOutputFileHashes(declaredOutputPaths);
 
@@ -2118,9 +2276,66 @@ const main = async () => {
             );
 
           } catch (err) {
-            console.error(`[EXEC ERROR] ${task.id}: ${err?.message || err}`);
+            const message = String(err?.message || err || 'unknown_error');
+            const { modelKey, model } = resolveModelForSkill(runtimeConfig, task.skill);
+            if (!parseStarted) {
+              const stageClass =
+                stage === 'provider_call'
+                  ? 'provider_call_failure'
+                  : 'pre_parse_failure';
+              const preParseEvidence = {
+                task_id: task.id,
+                run_id: state.run_id || 'unknown',
+                skill: task.skill || 'unknown',
+                model,
+                model_key: modelKey,
+                stage,
+                error_class:
+                  message.includes('OpenRouter returned empty assistant content')
+                    ? 'empty_assistant_content'
+                    : message.includes('OpenRouter API error')
+                    ? 'provider_http_error'
+                    : message.includes('Empty model response')
+                    ? 'empty_model_response'
+                    : stageClass,
+                error_message: message,
+                finish_reason: parseFinishReason(message),
+                prompt_len: promptLen,
+                raw_type: rawType,
+                raw_len: rawLen,
+                timestamp: new Date().toISOString(),
+                raw_preview: rawPreview || null
+              };
+              const evidenceDir = path.join(SYSTEM_DIR, 'evidence');
+              ensureDir(evidenceDir);
+              fs.writeFileSync(
+                path.join(evidenceDir, `${task.id}.failure.json`),
+                JSON.stringify(preParseEvidence, null, 2),
+                'utf-8'
+              );
+            }
+            const failureClass =
+              message.includes('truncated or incomplete') ||
+              message.includes('JSON parse failed') ||
+              message.includes('No JSON object start found') ||
+              message.includes('Empty model response')
+                ? 'parse_or_truncation_failure'
+                : message.includes('Output missing files array') ||
+                  message.includes('Output insufficiency') ||
+                  message.includes('has no declared output files to verify') ||
+                  message.includes('No declared output files were modified')
+                ? 'output_sufficiency_failure'
+                : 'task_execution_failure';
+            console.error(`[EXEC ERROR] ${task.id} (${execCtx}) class=${failureClass}: ${message}`);
             updateTask(tasksDoc, task.id, { estado: 'failed' });
             anyTaskUpdated = true;
+            hardFailure = {
+              taskId: task.id,
+              failureClass,
+              message,
+              haltReason: `batch_stopped_on_${failureClass}:${task.id}`
+            };
+            break;
           }
         }
         
@@ -2135,6 +2350,20 @@ const main = async () => {
           } else {
             tasksHash = computeFileHash(TASKS_FILE);
           }
+        }
+
+        if (hardFailure) {
+          state.phase = 'needs_review';
+          state.status = 'needs_review';
+          state.halt_reason = hardFailure.haltReason;
+          appendRunHistory(state, tasksDoc, `hard_stop_${hardFailure.taskId}`);
+          appendEvent('batch_hard_stop', {
+            run_id: state.run_id,
+            task_id: hardFailure.taskId,
+            class: hardFailure.failureClass
+          });
+          console.error(`[HALT] Stopped batch on first failure: task=${hardFailure.taskId} class=${hardFailure.failureClass}`);
+          return;
         }
       }
 

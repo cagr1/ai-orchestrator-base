@@ -87,6 +87,8 @@ INSTRUCTIONS:
 - "priority": 1 (highest) to 5 (lowest).
 - "depends_on": list IDs of tasks that must finish first.
 - Each task "output" must list at most 2 specific file paths (no directory wildcards like /src or /public). Split large project scaffolds across multiple tasks so each task writes 1–2 files.
+- If any task uses skill "frontend-html-basic", make T1 a minimal bootstrap task that outputs ONLY "index.html". Move CSS/JS files to later tasks (T2+).
+- For that same frontend-html-basic flow, make T2 output ONLY "docs/wireframe.md" and keep it concise (short wireframe summary, not a full design system spec).
 
 REQUIRED YAML SCHEMA:
 \`\`\`yaml
@@ -119,6 +121,24 @@ const extractYaml = (text) => {
 };
 
 const REQUIRED_TASK_FIELDS = ['id', 'title', 'description', 'skill', 'estado', 'priority', 'depends_on', 'input', 'output'];
+
+const enforceFrontendBootstrap = (tasks = []) => {
+  const t1 = tasks.find(task => task && task.id === 'T1');
+  if (!t1) return;
+  if (t1.skill !== 'frontend-html-basic') return;
+  t1.output = ['index.html'];
+};
+
+const enforceFrontendT2Sizing = (tasks = []) => {
+  const t1 = tasks.find(task => task && task.id === 'T1');
+  if (!t1 || t1.skill !== 'frontend-html-basic') return;
+
+  const t2 = tasks.find(task => task && task.id === 'T2');
+  if (!t2) return;
+
+  t2.output = ['docs/wireframe.md'];
+  t2.description = 'Write a concise landing-page wireframe summary in Markdown (max 120 lines): sections, content hierarchy, and brief component notes. Do not include full style guide, exhaustive copy, or long design-system documentation.';
+};
 
 const generateTasks = async ({ goal, systemDir, config, state }) => {
   const tier = detectTier(goal, config.skill_triggers);
@@ -198,6 +218,8 @@ COMPLETED TASKS: ${completed.map(t => t.title || t.id).join(', ') || 'none'}`;
     return { ok: false, error: 'Planner produced tasks but none passed schema validation', discard_reason: 'all_tasks_invalid_schema', raw: rawOutput };
   }
 
+  enforceFrontendBootstrap(validTasks);
+  enforceFrontendT2Sizing(validTasks);
   tasksDoc.tasks = validTasks;
   tasksDoc.metadata = {
     ...(tasksDoc.metadata || {}),

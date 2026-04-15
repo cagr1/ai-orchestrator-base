@@ -8,6 +8,14 @@ const { generateTasks: autoGenerateTasks } = require('../../integrations/auto-pl
 const RUNNER = path.join(__dirname, '../../..', 'runner.js');
 
 const createDashboardService = ({ rootDir, realtime, websocket }) => {
+  let activeRunner = null;
+
+  const isRunnerActive = () => {
+    if (!activeRunner || !activeRunner.child) return false;
+    const child = activeRunner.child;
+    return child.exitCode === null && !child.killed;
+  };
+
   const getActiveRoot = () => {
     const cfg = getDashboardConfig();
     if (!cfg.project_root) return null;
@@ -148,7 +156,7 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
 
   const triggerRun = (command = 'run') => {
     try {
-      const { activeRoot } = getPaths();
+      const { activeRoot, stateFile } = getPaths();
       if (!activeRoot) {
         return { ok: false, output: 'No valid project_root set. Please set a valid project root path.' };
       }
@@ -156,7 +164,33 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
       if (!validCommands.includes(command)) {
         command = 'run';
       }
+      const state = readJSON(stateFile) || {};
+      const runId = state.run_id || 'unknown';
+
+      if (isRunnerActive()) {
+        return {
+          ok: false,
+          code: 'runner_already_active',
+          pid: activeRunner.pid,
+          run_id: activeRunner.runId,
+          output: `Runner already active (pid=${activeRunner.pid}, run_id=${activeRunner.runId})`
+        };
+      }
+
       const child = spawn('node', [RUNNER, command, '--root', activeRoot], { cwd: activeRoot });
+      activeRunner = {
+        child,
+        pid: child.pid,
+        runId,
+        root: activeRoot,
+        command,
+        startedAt: new Date().toISOString()
+      };
+
+      broadcast('terminal:output', {
+        type: 'info',
+        data: `[RUNNER START] pid=${child.pid} run_id=${runId} command=${command} root=${activeRoot}\n`
+      });
 
       child.stdout.on('data', (data) => {
         const output = data.toString();
@@ -169,18 +203,34 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
       });
 
       child.on('close', (code) => {
+        const ctx = activeRunner && activeRunner.pid === child.pid ? activeRunner : { pid: child.pid, runId };
+        broadcast('terminal:output', {
+          type: 'info',
+          data: `[RUNNER END] pid=${ctx.pid} run_id=${ctx.runId} code=${code}\n`
+        });
+        if (activeRunner && activeRunner.pid === child.pid) {
+          activeRunner = null;
+        }
         broadcast('terminal:closed', { code });
         broadcast('snapshot:updated', getSnapshot());
       });
 
       child.on('error', (err) => {
+        const ctx = activeRunner && activeRunner.pid === child.pid ? activeRunner : { pid: child.pid, runId };
+        broadcast('terminal:output', {
+          type: 'error',
+          data: `[RUNNER ERROR] pid=${ctx.pid} run_id=${ctx.runId} error=${err.message}\n`
+        });
+        if (activeRunner && activeRunner.pid === child.pid) {
+          activeRunner = null;
+        }
         broadcast('terminal:error', { error: err.message });
         broadcast('snapshot:updated', getSnapshot());
       });
 
       broadcast('snapshot:updated', getSnapshot());
 
-      return { ok: true, pid: child.pid, message: `Runner ${command} started` };
+      return { ok: true, pid: child.pid, run_id: runId, message: `Runner ${command} started` };
     } catch (e) {
       return { ok: false, output: e.message };
     }
