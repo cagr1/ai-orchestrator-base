@@ -1,20 +1,10 @@
 version: '3.0'
-generated_at: '2026-04-07T03:10:32Z'
-run_id: prueba-completa-engr-20260407
+generated_at: '2026-04-15T03:15:22.944Z'
+run_id: construye-una-landig-20260415
+tasks: []
 metadata:
-  total_tasks: 1
-  completed: 1
+  total_tasks: 0
+  completed: 0
   pending: 0
   failed: 0
   blocked: 0
-tasks:
-  - id: T1
-    title: Tarea minima de prueba (checkpoint Engram)
-    description: Crear un archivo de prueba en la raiz para validar el flujo completo
-    skill: frontend-html-basic
-    estado: done
-    priority: 1
-    depends_on: []
-    input: []
-    output:
-      - smoke-test.txt

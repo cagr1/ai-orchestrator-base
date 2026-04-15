@@ -3,6 +3,9 @@ const path = require('path');
 const yaml = require('js-yaml');
 const { execSync, spawn } = require('child_process');
 const { createMemoryManager } = require('../../integrations/memory-manager');
+const { generateTasks: autoGenerateTasks } = require('../../integrations/auto-planner');
+
+const RUNNER = path.join(__dirname, '../../..', 'runner.js');
 
 const createDashboardService = ({ rootDir, realtime, websocket }) => {
   const systemDir = path.join(rootDir, 'system');
@@ -103,8 +106,7 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
 
 const triggerRun = () => {
     try {
-      const { activeRoot } = getPaths();
-      const child = spawn('node', ['runner.js', 'run'], { cwd: activeRoot });
+      const child = spawn('node', [RUNNER, 'run'], { cwd: rootDir });
       
       child.stdout.on('data', (data) => {
         const output = data.toString();
@@ -160,8 +162,9 @@ const triggerRun = () => {
     try {
       const next = updateDashboardConfig({ project_root: projectRoot || getActiveRoot() });
       ensureProjectRoot(next.project_root);
-      const output = execSync(`node runner.js init "${goal || 'Define project goal here'}"`, {
-        cwd: next.project_root,
+      const output = execSync(`node "${RUNNER}" init "${goal || 'Define project goal here'}"`, {
+        cwd: rootDir,
+        timeout: 15000,
         encoding: 'utf-8'
       });
       return { ok: true, output };
@@ -270,8 +273,7 @@ const triggerRun = () => {
 
   const refreshSkills = () => {
     try {
-      const { activeRoot } = getPaths();
-      execSync('node runner.js skills rebuild', { cwd: activeRoot, encoding: 'utf-8' });
+      execSync(`node "${RUNNER}" skills rebuild`, { cwd: rootDir, encoding: 'utf-8' });
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.stdout || e.message };
@@ -280,9 +282,8 @@ const triggerRun = () => {
 
   const detectSkills = (apply = false) => {
     try {
-      const cmd = apply ? 'node runner.js skills install' : 'node runner.js skills detect';
-      const { activeRoot } = getPaths();
-      const output = execSync(cmd, { cwd: activeRoot, encoding: 'utf-8' });
+      const cmd = apply ? `node "${RUNNER}" skills install` : `node "${RUNNER}" skills detect`;
+      const output = execSync(cmd, { cwd: rootDir, encoding: 'utf-8' });
       return { ok: true, output };
     } catch (e) {
       return { ok: false, output: e.stdout || e.message };
@@ -296,6 +297,17 @@ const triggerRun = () => {
     return memoryManager.search({ query, project, limit: 10 });
   };
 
+  const generateTasks = async (goal) => {
+    const { configFile, stateFile } = getPaths();
+    const config = readJSON(configFile) || readJSON(path.join(rootDir, 'system', 'config.json')) || {};
+    const state = readJSON(stateFile) || readJSON(path.join(rootDir, 'system', 'state.json')) || {};
+    const systemDir = path.join(rootDir, 'system');
+    const effectiveGoal = goal || state.goal || getDashboardConfig().prompt || 'Build a web project';
+    const result = await autoGenerateTasks({ goal: effectiveGoal, systemDir, config, state });
+    if (result.ok) broadcast('tasks:updated', result.tasks);
+    return result;
+  };
+
   return {
     getStatus,
     getTasks,
@@ -306,6 +318,7 @@ const triggerRun = () => {
     getDashboardConfig,
     updateDashboardConfig,
     initProject,
+    generateTasks,
     listSkills,
     listSkillFiles,
     readSkillFile,

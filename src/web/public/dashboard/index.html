@@ -18,85 +18,59 @@
         <div class="global-brand">
           <span class="logo">◈</span>
           <span class="brand-name">OrchestOS</span>
+          <div class="header-badges">
+            <span class="header-badge status-badge" id="statusValue">—</span>
+            <span class="header-badge pending-badge" id="sidebarPendingCount" data-tooltip="Pending tasks">0</span>
+          </div>
         </div>
         <div class="global-controls">
-          <button class="global-btn" id="langToggle" title="Toggle language">
-            <span class="lang-icon">🌐</span>
-            <span id="langLabel">EN</span>
+          <button class="global-btn config-btn" id="configBtn" data-tooltip="Configuration">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
-          <button class="global-btn" id="helpBtn" title="Getting started">?</button>
+          <button class="global-btn" id="langToggle" data-tooltip="Toggle language">
+            EN
+          </button>
+          <button class="global-btn" id="helpBtn" data-tooltip="Quick reference">?</button>
         </div>
       </header>
 
       <main class="shell layout">
         <aside class="sidebar">
-        <div class="brand">
-          
-          <h1 data-i18n="title">Operations Dashboard</h1>
-          <p class="muted" data-i18n="subtitle">Control, memory, skills, and execution in one place.</p>
-        </div>
-
-        <nav class="nav">
-          <button class="nav-item active" data-tab="prompt" data-i18n="tab_prompt">Prompt Studio</button>
-          <button class="nav-item" data-tab="tasks" data-i18n="tab_tasks">Tasks</button>
-          <button class="nav-item" data-tab="memory" data-i18n="tab_memory">Memory</button>
-          <button class="nav-item" data-tab="skills" data-i18n="tab_skills">Skills</button>
-          <button class="nav-item" data-tab="project" data-i18n="tab_project">Project</button>
-          <button class="nav-item" data-tab="stats" data-i18n="tab_stats">Stats</button>
-          <button class="nav-item" data-tab="commands" data-i18n="tab_commands">Commands</button>
-        </nav>
-
-                <div class="status-card" id="statusCard">
-          <p class="label" data-i18n="status">Status</p>
-          <p class="value" id="statusValue">Loading...</p>
-          <p class="meta" id="statusMeta">-</p>
-        </div>
-
-        <div class="panel compact">
-          <div class="panel-header">
-            <h2 data-i18n="pending">Pending</h2>
-            <span class="pill" id="pendingCount">0</span>
-          </div>
-          <div class="panel-body" id="pendingList"></div>
-        </div>
-      </aside>
+          <nav class="nav">
+            <button class="nav-item active" data-tab="prompt" data-tooltip="Execute">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+            <button class="nav-item" data-tab="tasks" data-tooltip="Tasks">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </button>
+            <button class="nav-item" data-tab="memory" data-tooltip="Memory">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            </button>
+            <button class="nav-item" data-tab="skills" data-tooltip="Skills">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </button>
+            <button class="nav-item" data-tab="stats" data-tooltip="Observe">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </button>
+          </nav>
+        </aside>
 
       <section class="content">
-        <header class="content-header">
-          <div>
-            <h2 id="tabTitle">Prompt Studio</h2>
-            <p class="muted" id="tabSubtitle">Write or paste your prompts with focus.</p>
-          </div>
-          <div class="content-actions">
-                <button class="btn ghost" hx-post="/api/v1/execute" hx-swap="none" data-i18n="run" data-tooltip="Execute all pending tasks">Run</button>
-            <button class="btn" id="savePromptBtn" data-i18n="save">Save</button>
-            <button class="btn primary" id="createProjectBtn" data-i18n="create_project">Create Project</button>
-          </div>
-        </header>
-
         <section class="tab-panel active" id="tab-prompt">
-          <div class="panel focus">
-            <div class="panel-header">
-              <h2 data-i18n="prompts">Prompt Studio</h2>
-            </div>
-                        <div class="panel-body">
-              
-              <div class="prompt-editor">
-                <textarea class="textbox xl" id="promptInput" rows="12" placeholder="Paste or write your prompt here...&#10;&#10;Press Enter to send, Shift+Enter for new line."></textarea>
-                <div class="prompt-actions">
-                  
-                  <button class="btn primary" id="sendPromptBtn" data-i18n="send">Send</button>
-                </div>
+          <div class="execute-layout">
+            <div class="prompt-pane">
+              <textarea class="textbox execute-textarea" id="promptInput" placeholder="Write your project goal here...&#10;&#10;Example: Create a landing page for a security company with dark theme."></textarea>
+              <div class="execute-actions">
+                <button class="btn primary" id="createProjectBtn">Create Project</button>
+                <button class="btn accent" id="generateTasksBtn">Generate Tasks</button>
+                <button class="btn" id="runBtn">Run ▶</button>
               </div>
             </div>
-          </div>
-
-          <div class="panel terminal-panel">
-            <div class="panel-header">
-              <h2 data-i18n="terminal">Terminal Output</h2>
-              <button class="btn ghost btn-small" id="clearTerminalBtn" data-tooltip="Clear terminal output">Clear</button>
-            </div>
-            <div class="panel-body terminal-body">
+            <div class="terminal-pane">
+              <div class="terminal-pane-header">
+                <span>Terminal Output</span>
+                <button class="btn ghost btn-small" id="clearTerminalBtn">Clear</button>
+              </div>
               <div class="terminal-output" id="terminalOutput">
                 <div class="terminal-line muted">Terminal output will appear here when runner executes...</div>
               </div>
@@ -105,10 +79,14 @@
         </section>
 
 <section class="tab-panel" id="tab-tasks">
+          <div class="panel-header" style="padding:12px 0 16px;display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="margin:0;">Tasks</h2>
+            <button class="btn accent" id="generateTasksBtnTasks">Generate Tasks</button>
+          </div>
           <div class="kanban-board">
             <div class="kanban-column">
               <div class="kanban-header">
-                <h3>📋 Pending</h3>
+                <h3>Pending</h3>
                 <span class="kanban-count" id="pendingCount">0</span>
               </div>
               <div class="kanban-list" id="kanban-pending" data-state="pending">
@@ -118,7 +96,7 @@
 
             <div class="kanban-column">
               <div class="kanban-header">
-                <h3>⚡ Running</h3>
+                <h3>Running</h3>
                 <span class="kanban-count" id="runningCount">0</span>
               </div>
               <div class="kanban-list" id="kanban-running" data-state="running">
@@ -128,7 +106,7 @@
 
             <div class="kanban-column">
               <div class="kanban-header">
-                <h3>✅ Done</h3>
+                <h3>Done</h3>
                 <span class="kanban-count" id="doneCount">0</span>
               </div>
               <div class="kanban-list" id="kanban-done" data-state="done">
@@ -138,7 +116,7 @@
 
             <div class="kanban-column">
               <div class="kanban-header">
-                <h3>❌ Failed</h3>
+                <h3>Failed</h3>
                 <span class="kanban-count" id="failedCount">0</span>
               </div>
               <div class="kanban-list" id="kanban-failed" data-state="failed">
@@ -148,7 +126,7 @@
 
             <div class="kanban-column">
               <div class="kanban-header">
-                <h3>🚧 Blocked</h3>
+                <h3>Blocked</h3>
                 <span class="kanban-count" id="blockedCount">0</span>
               </div>
               <div class="kanban-list" id="kanban-blocked" data-state="blocked">
@@ -161,7 +139,6 @@
             <div class="panel">
               <div class="panel-header">
                 <h2 data-i18n="details">Details</h2>
-                <button class="btn" hx-post="/api/v1/execute" hx-swap="none" data-i18n="run">Run</button>
               </div>
               <div class="panel-body" id="taskDetails">
                 <p class="muted" data-i18n="select_task">Select a task to see details.</p>
@@ -174,17 +151,17 @@
           <div class="grid two">
             <div class="panel">
               <div class="panel-header">
-                <h2 data-i18n="memory">Memory Search</h2>
+                <h2>Memory Search</h2>
               </div>
               <div class="panel-body">
-                <label class="label" data-i18n="memory_query">Search query</label>
+                <label class="label">Search query</label>
                 <input class="textbox" id="memoryQuery" placeholder="auth middleware" />
-                <button class="btn" id="memorySearchBtn" data-i18n="search">Search</button>
+                <button class="btn" id="memorySearchBtn">Search</button>
               </div>
             </div>
             <div class="panel">
               <div class="panel-header">
-                <h2 data-i18n="memory_results">Results</h2>
+                <h2>Results</h2>
               </div>
               <div class="panel-body" id="memoryResults">
                 <p class="muted">No results yet.</p>
@@ -235,144 +212,81 @@ description: ...
           </div>
         </section>
 
-        <section class="tab-panel" id="tab-project">
-          <div class="grid two">
-            <div class="panel">
-              <div class="panel-header">
-                <h2 data-i18n="project_files">Project Files</h2>
-                <button class="btn ghost" id="filesRefreshBtn" data-i18n="refresh">Refresh</button>
-              </div>
-              <div class="panel-body" id="filesList">
-                <p class="muted">No files loaded.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <div class="panel-header">
-                <h2 data-i18n="file_editor">File Editor</h2>
-              </div>
-              <div class="panel-body">
-                <label class="label" data-i18n="file_path">File path</label>
-                <input class="textbox" id="filePathInput" placeholder="index.html" />
-                <textarea class="textbox xl" id="fileContentInput" rows="12" placeholder="Write your file content here..."></textarea>
-                <div class="content-actions">
-                  <button class="btn ghost" id="fileLoadBtn" data-i18n="load">Load</button>
-                  <button class="btn" id="fileSaveBtn" data-i18n="save">Save</button>
-                </div>
-              </div>
-            </div>
-            <div class="panel">
-              <div class="panel-header">
-                <h2 data-i18n="next_steps">Next Steps</h2>
-              </div>
-              <div class="panel-body checklist">
-                <label><input type="checkbox" /> Set project root</label>
-                <label><input type="checkbox" /> Init project</label>
-                <label><input type="checkbox" /> Write prompt</label>
-                <label><input type="checkbox" /> Create files</label>
-                <label><input type="checkbox" /> Run tasks</label>
-              </div>
-            </div>
-          </div>
-        </section>
 
-<section class="tab-panel" id="tab-stats">
-          <div class="grid three">
-            <div class="panel">
-              <div class="panel-header">
-                <h2 data-i18n="controls">Controls</h2>
-              </div>
-              <div class="panel-body">
-                <form class="control-form" hx-post="/api/v1/control" hx-swap="none">
-                  <label>
-                    Phase
-                    <input name="phase" placeholder="planning / execution" />
-                  </label>
-                  <label>
-                    Status
-                    <input name="status" placeholder="running / paused" />
-                  </label>
-                  <button class="btn" type="submit" data-i18n="apply">Apply</button>
-                </form>
-              </div>
-            </div>
-
-            <div class="panel">
-              <div class="panel-header">
-                <h2 data-i18n="project">Project Root</h2>
-              </div>
-              <div class="panel-body">
-                <label class="label" data-i18n="project_path">Project path</label>
-                <div class="input-with-btn">
-                <input class="textbox" id="projectPath" placeholder="/Users/name/project" />
-                <button class="file-picker-btn" id="browseFolderBtn">📁 Browse</button>
-              </div>
-                <button class="btn ghost" id="projectSaveBtn" data-i18n="save">Save</button>
-                <p class="muted">Set the directory you want AgentOS to operate on.</p>
-                <label class="label" data-i18n="project_goal">Project goal</label>
-                <input class="textbox" id="projectGoal" placeholder="Build a Hello World in HTML" />
-                <button class="btn" id="projectInitBtn" data-i18n="init">Init Project</button>
-              </div>
-            </div>
-
-            <div class="panel">
-              <div class="panel-header">
-                <h2 data-i18n="realtime">Realtime Feed</h2>
-              </div>
-              <div class="panel-body">
-                <ul class="feed" id="eventFeed"></ul>
-              </div>
-            </div>
-
-            <div class="panel">
-              <div class="panel-header">
-                <h2>Engram Status</h2>
-              </div>
-              <div class="panel-body">
-                <div class="engram-status" id="engramStatus">
-                  <p class="muted">Checking Engram status...</p>
-                </div>
-                <div class="engram-instructions" id="engramInstructions" style="display: none;">
-                  <p class="small muted">Engram provides persistent memory for AI agents. Install it for better memory management.</p>
-                  <button class="btn btn-small" id="installEngramBtn">Install Engram</button>
-                  <button class="btn ghost btn-small" id="testEngramBtn">Test Connection</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="tab-panel" id="tab-commands">
-          <div class="panel">
+        <section class="tab-panel" id="tab-stats">
+          <div class="panel observe-feed-panel">
             <div class="panel-header">
-              <h2 data-i18n="commands">Commands</h2>
+              <h2 data-i18n="realtime">Realtime Feed</h2>
             </div>
             <div class="panel-body">
-              <div class="command">node runner.js init "Goal"</div>
-              <div class="command">node runner.js run</div>
-              <div class="command">node runner.js skills detect</div>
-              <div class="command">node runner.js skills install</div>
-              <div class="command">node runner.js memory search "query"</div>
-              <div class="command">npm run dashboard</div>
+              <ul class="feed" id="eventFeed"></ul>
             </div>
           </div>
         </section>
+
       </section>
     </main>
 
+    <!-- Config Panel -->
+    <div class="config-backdrop" id="configBackdrop"></div>
+    <aside class="config-panel" id="configPanel">
+      <div class="config-panel-header">
+        <h2>Configuration</h2>
+        <button class="btn ghost btn-small" id="configCloseBtn">✕</button>
+      </div>
+      <div class="config-panel-body">
+
+        <section class="config-section">
+          <h3>Project Root</h3>
+          <p class="small muted">Directory for AgentOS to operate on.</p>
+          <div class="input-with-btn">
+            <input class="textbox" id="projectPath" placeholder="/Users/name/project" />
+            <button class="file-picker-btn" id="browseFolderBtn">Browse</button>
+          </div>
+          <button class="btn ghost btn-small" id="projectSaveBtn" style="margin-top:8px;align-self:flex-start;">Save</button>
+        </section>
+
+        <section class="config-section">
+          <h3>API Keys <span class="header-badge" id="apiKeysBadge">checking...</span></h3>
+          <p class="small muted">Keys are saved to <code>.env</code> and take effect immediately — no restart needed.</p>
+          <label class="label">OpenRouter API Key</label>
+          <div class="input-with-btn">
+            <input class="textbox" type="password" id="openrouterKeyInput" placeholder="sk-or-v1-..." autocomplete="off" />
+            <button class="btn ghost btn-small" id="toggleKeyVisibilityBtn">Show</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <button class="btn" id="saveApiKeyBtn">Save</button>
+            <span id="apiKeyStatus" class="small muted"></span>
+          </div>
+        </section>
+
+        <section class="config-section">
+          <h3>Memory Provider <span class="header-badge" id="memoryProviderBadge">checking...</span></h3>
+          <div id="engramStatus">
+            <p class="muted">Checking memory provider...</p>
+          </div>
+          <div id="engramInstructions" style="display:none;margin-top:12px;">
+            <p class="small muted" style="margin-bottom:8px;">Engram is optional — local file memory is the fallback and all features work without it.</p>
+            <div id="engramInstallInstructions" style="display:none;background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;font-family:monospace;color:var(--muted);white-space:pre-wrap;"></div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn ghost btn-small" id="installEngramBtn">How to install</button>
+              <button class="btn ghost btn-small" id="testEngramBtn">Test connection</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </aside>
+
     <script>
       const statusValue = document.getElementById('statusValue');
-      const statusMeta = document.getElementById('statusMeta');
       const taskDetails = document.getElementById('taskDetails');
-      const pendingList = document.getElementById('pendingList');
       const pendingCount = document.getElementById('pendingCount');
       const eventFeed = document.getElementById('eventFeed');
       const langToggle = document.getElementById('langToggle');
       const tabs = document.querySelectorAll('.nav-item');
       const tabPanels = document.querySelectorAll('.tab-panel');
-      const tabTitle = document.getElementById('tabTitle');
-      const tabSubtitle = document.getElementById('tabSubtitle');
 const promptInput = document.getElementById('promptInput');
-      const sendPromptBtn = document.getElementById('sendPromptBtn');
       const memoryQuery = document.getElementById('memoryQuery');
       const memoryResults = document.getElementById('memoryResults');
       const memorySearchBtn = document.getElementById('memorySearchBtn');
@@ -384,17 +298,8 @@ const promptInput = document.getElementById('promptInput');
       const skillContentInput = document.getElementById('skillContentInput');
       const skillLoadBtn = document.getElementById('skillLoadBtn');
       const skillSaveBtn = document.getElementById('skillSaveBtn');
-      const filesList = document.getElementById('filesList');
-      const filesRefreshBtn = document.getElementById('filesRefreshBtn');
-      const filePathInput = document.getElementById('filePathInput');
-      const fileContentInput = document.getElementById('fileContentInput');
-      const fileLoadBtn = document.getElementById('fileLoadBtn');
-      const fileSaveBtn = document.getElementById('fileSaveBtn');
-      const savePromptBtn = document.getElementById('savePromptBtn');
       const projectPath = document.getElementById('projectPath');
-      const projectGoal = document.getElementById('projectGoal');
       const projectSaveBtn = document.getElementById('projectSaveBtn');
-      const projectInitBtn = document.getElementById('projectInitBtn');
 
       const i18n = {
         en: {
@@ -414,13 +319,11 @@ const promptInput = document.getElementById('promptInput');
           save: 'Save',
           loading: 'Loading tasks...',
           select_task: 'Select a task to see details.',
-          tab_prompt: 'Prompt Studio',
+          tab_prompt: 'Execute',
           tab_tasks: 'Tasks',
           tab_memory: 'Memory',
           tab_skills: 'Skills',
-          tab_project: 'Project',
-          tab_stats: 'Stats',
-          tab_commands: 'Commands',
+          tab_stats: 'Observe',
           memory: 'Memory Search',
           memory_query: 'Search query',
           memory_results: 'Results',
@@ -432,15 +335,10 @@ const promptInput = document.getElementById('promptInput');
           search: 'Search',
           project: 'Project Root',
           project_path: 'Project path',
-          project_goal: 'Project goal',
           init: 'Init Project',
           skill_editor: 'Skill Editor',
           skill_path: 'Skill path',
           load: 'Load',
-project_files: 'Project Files',
-          file_editor: 'File Editor',
-          file_path: 'File path',
-          next_steps: 'Next Steps',
           terminal: 'Terminal Output'
         },
         es: {
@@ -460,13 +358,11 @@ project_files: 'Project Files',
           save: 'Guardar',
           loading: 'Cargando tareas...',
           select_task: 'Selecciona una tarea para ver detalles.',
-          tab_prompt: 'Prompt Studio',
+          tab_prompt: 'Ejecutar',
           tab_tasks: 'Tareas',
           tab_memory: 'Memoria',
           tab_skills: 'Skills',
-          tab_project: 'Proyecto',
-          tab_stats: 'Estadísticas',
-          tab_commands: 'Comandos',
+          tab_stats: 'Observar',
           memory: 'Búsqueda de memoria',
           memory_query: 'Consulta',
           memory_results: 'Resultados',
@@ -478,15 +374,10 @@ project_files: 'Project Files',
           search: 'Buscar',
           project: 'Ruta del proyecto',
           project_path: 'Ruta',
-          project_goal: 'Objetivo del proyecto',
           init: 'Inicializar proyecto',
           skill_editor: 'Editor de skills',
           skill_path: 'Ruta del skill',
           load: 'Cargar',
-project_files: 'Archivos del proyecto',
-          file_editor: 'Editor de archivos',
-          file_path: 'Ruta del archivo',
-          next_steps: 'Pasos sugeridos',
           terminal: 'Salida de Terminal'
         }
       };
@@ -509,10 +400,21 @@ project_files: 'Archivos del proyecto',
         setActiveTab(document.querySelector('.nav-item.active')?.dataset.tab || 'prompt');
       });
 
-const renderTasks = (tasks = []) => {
+const setKanbanLoading = (loading) => {
+          if (loading) {
+            document.querySelectorAll('.kanban-list').forEach(list => {
+              list.innerHTML = '<p class="muted empty-state"><span class="spinner sm"></span> Loading...</p>';
+            });
+          }
+        };
+
+        const renderTasks = (tasks = []) => {
         if (!tasks.length) {
-          document.querySelectorAll('.kanban-list').forEach(list => {
-            list.innerHTML = '<p class="muted empty-state">Loading tasks...</p>';
+          document.getElementById('kanban-pending').innerHTML =
+            '<p class="muted empty-state">No tasks yet — add tasks manually or click <strong>Generate Tasks</strong>.</p>';
+          ['running', 'done', 'failed', 'blocked'].forEach(state => {
+            const col = document.getElementById(`kanban-${state}`);
+            if (col) col.innerHTML = '<p class="muted empty-state">No tasks</p>';
           });
           document.querySelectorAll('.kanban-count').forEach(count => {
             count.textContent = '0';
@@ -635,24 +537,20 @@ const renderTasks = (tasks = []) => {
         });
 
         // Update sidebar pending count
-        const pendingCountEl = document.getElementById('pendingCount');
+        const pendingCountEl = document.getElementById('sidebarPendingCount');
         if (pendingCountEl) {
           pendingCountEl.textContent = String(groups.pending.length);
-        }
-        const pendingListEl = document.getElementById('pendingList');
-        if (pendingListEl) {
-          pendingListEl.innerHTML = groups.pending.length
-            ? groups.pending.map(t => `<div class="pending">${t.id} · ${t.title}</div>`).join('')
-            : `<p class="muted">${currentLang === 'en' ? 'No pending tasks.' : 'Sin pendientes.'}</p>`;
         }
       };
 
       const renderStatus = (state) => {
-        statusValue.innerHTML = `<span class="status-badge ${state.status || 'unknown'}">${state.status || 'unknown'}</span>`;
-        statusMeta.textContent = `phase: ${state.phase || '-'} | iteration: ${state.iteration || 0}`;
+        const s = state.status || 'unknown';
+        statusValue.textContent = s;
+        statusValue.className = `header-badge status-badge ${s}`;
       };
 
       const loadInitial = async () => {
+        setKanbanLoading(true);
         const res = await fetch('/dashboard/data');
         const data = await res.json();
         renderStatus(data.status || {});
@@ -710,42 +608,6 @@ const renderTasks = (tasks = []) => {
         memoryResults.innerHTML = items.map(r => `<div class="pending">${r.title ? `${r.title} · ` : ''}${r.content || ''}</div>`).join('');
       };
 
-      const loadFiles = async () => {
-        const res = await fetch('/api/v1/files');
-        const items = await res.json();
-        if (!items.length) {
-          filesList.innerHTML = `<p class="muted">No files found.</p>`;
-          return;
-        }
-        filesList.innerHTML = items.map(f => `<button class="pending file-item" data-file-path="${f}">${f}</button>`).join('');
-        filesList.querySelectorAll('.file-item').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            filePathInput.value = btn.dataset.filePath;
-            await loadFile();
-          });
-        });
-      };
-
-      const loadFile = async () => {
-        const rel = filePathInput.value.trim();
-        if (!rel) return;
-        const res = await fetch(`/api/v1/files/read?path=${encodeURIComponent(rel)}`);
-        const data = await res.json();
-        if (data?.content !== undefined) {
-          fileContentInput.value = data.content;
-        }
-      };
-
-      const saveFile = async () => {
-        const rel = filePathInput.value.trim();
-        if (!rel) return;
-        await fetch('/api/v1/files/write', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: rel, content: fileContentInput.value })
-        });
-        loadFiles();
-      };
 
 const logEvent = (label) => {
         const item = document.createElement('li');
@@ -784,41 +646,54 @@ const logEvent = (label) => {
         }
       };
 
+      const setMemoryBadge = (label, color) => {
+        const badge = document.getElementById('memoryProviderBadge');
+        if (!badge) return;
+        badge.textContent = label;
+        badge.style.background = color === 'green'
+          ? 'rgba(34,197,94,0.15)' : color === 'amber'
+          ? 'rgba(251,191,36,0.15)' : 'rgba(148,163,184,0.15)';
+        badge.style.color = color === 'green' ? '#4ade80'
+          : color === 'amber' ? '#fbbf24' : 'var(--muted)';
+      };
+
       const checkEngramStatus = async () => {
         const statusEl = document.getElementById('engramStatus');
         const instructionsEl = document.getElementById('engramInstructions');
-        
+
         try {
           const res = await fetch('/api/v1/engram/health');
           const data = await res.json();
-          
+
           if (data.ok) {
-            statusEl.innerHTML = '<p class="success">✅ Engram is running</p>';
+            statusEl.innerHTML = '<p class="success" style="margin:0;">Engram connected — persistent memory active.</p>';
+            setMemoryBadge('Engram', 'green');
             instructionsEl.style.display = 'none';
           } else {
-            statusEl.innerHTML = '<p class="warning">⚠️ Engram is not responding</p>';
+            statusEl.innerHTML = '<p class="muted" style="margin:0;">Engram is not running. Using <strong>local file memory</strong> — no data loss.</p>';
+            setMemoryBadge('Local memory', 'amber');
             instructionsEl.style.display = 'block';
           }
         } catch (err) {
-          statusEl.innerHTML = '<p class="error">❌ Engram is not installed or not running</p>';
+          statusEl.innerHTML = '<p class="muted" style="margin:0;">Engram not detected. Using <strong>local file memory</strong> — all features work normally.</p>';
+          setMemoryBadge('Local memory', 'amber');
           instructionsEl.style.display = 'block';
         }
       };
 
       const installEngram = async () => {
+        const instrEl = document.getElementById('engramInstallInstructions');
         try {
           const res = await fetch('/api/v1/engram/install', { method: 'POST' });
           const data = await res.json();
-          
-          if (data.ok) {
-            showToast('Engram installation started', 'success');
-            // Check status again after a delay
-            setTimeout(checkEngramStatus, 3000);
+          if (data.ok && instrEl) {
+            instrEl.textContent = data.instructions || 'See https://github.com/gentleman-programming/engram';
+            instrEl.style.display = 'block';
           } else {
-            showToast('Failed to install Engram: ' + (data.error || 'Unknown error'), 'error');
+            showToast('Could not fetch install instructions', 'error');
           }
         } catch (err) {
-          showToast('Error installing Engram: ' + err.message, 'error');
+          showToast('Error: ' + err.message, 'error');
         }
       };
 
@@ -866,20 +741,6 @@ const connectRealtime = () => {
       const setActiveTab = (tab) => {
         tabs.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
         tabPanels.forEach(panel => panel.classList.toggle('active', panel.id === `tab-${tab}`));
-        tabTitle.textContent = i18n[currentLang][`tab_${tab}`] || 'Dashboard';
-        tabSubtitle.textContent = tab === 'prompt'
-          ? (currentLang === 'en' ? 'Write or paste your prompts with focus.' : 'Escribe o pega tus prompts con enfoque.')
-          : tab === 'tasks'
-            ? (currentLang === 'en' ? 'Track tasks and inspect details.' : 'Revisa tareas y detalles.')
-            : tab === 'memory'
-              ? (currentLang === 'en' ? 'Search Engram or local memory.' : 'Busca en Engram o memoria local.')
-              : tab === 'skills'
-                ? (currentLang === 'en' ? 'Review installed skills and update.' : 'Revisa skills instaladas y actualiza.')
-                : tab === 'project'
-                  ? (currentLang === 'en' ? 'Create and edit project files.' : 'Crea y edita archivos del proyecto.')
-                  : tab === 'stats'
-                    ? (currentLang === 'en' ? 'Monitor status and realtime events.' : 'Monitorea estado y eventos en tiempo real.')
-                    : (currentLang === 'en' ? 'Quick access to core commands.' : 'Acceso rápido a comandos clave.');
       };
 
       tabs.forEach(btn => {
@@ -909,14 +770,6 @@ const connectRealtime = () => {
       skillSaveBtn.addEventListener('click', saveSkillFile);
 
       memorySearchBtn.addEventListener('click', searchMemory);
-
-      savePromptBtn.addEventListener('click', async () => {
-        await fetch('/api/v1/prompt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: promptInput.value })
-        });
-      });
 
       projectSaveBtn.addEventListener('click', async () => {
         await fetch('/api/v1/project', {
@@ -967,36 +820,63 @@ const connectRealtime = () => {
         btn.innerHTML = '<span class="spinner sm"></span> Creating...';
         btn.disabled = true;
         try {
-          await fetch('/api/v1/project/init', {
+          const resp = await fetch('/api/v1/project/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              project_root: document.getElementById('projectPath').value || '.', 
-              goal: prompt 
+            body: JSON.stringify({
+              project_root: document.getElementById('projectPath').value || '.',
+              goal: prompt
             })
           });
-          showToast('Project created successfully!', 'success');
-          loadFiles();
+          const data = await resp.json();
+          if (!data.ok) {
+            showToast('Error creating project: ' + (data.output || data.error || 'unknown'), 'error');
+          } else {
+            showToast('Project created — runner started!', 'success');
+          }
         } catch (e) {
-          showToast('Error creating project', 'error');
+          showToast('Error creating project: ' + e.message, 'error');
         } finally {
           btn.innerHTML = 'Create Project';
           btn.disabled = false;
         }
       });
 
-      projectInitBtn.addEventListener('click', async () => {
-        projectInitBtn.innerHTML = '<span class="spinner sm"></span>';
-        await fetch('/api/v1/project/init', { 
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_root: projectPath.value, goal: projectGoal.value })
-        });
-      });
 
-filesRefreshBtn.addEventListener('click', loadFiles);
-      fileLoadBtn.addEventListener('click', loadFile);
-      fileSaveBtn.addEventListener('click', saveFile);
+// Generate Tasks button
+      const generateTasksBtn = document.getElementById('generateTasksBtn');
+      if (generateTasksBtn) {
+        generateTasksBtn.addEventListener('click', async () => {
+          const goal = document.getElementById('promptInput')?.value?.trim() || '';
+          generateTasksBtn.innerHTML = '<span class="spinner sm"></span> Generating...';
+          generateTasksBtn.disabled = true;
+          try {
+            const resp = await fetch('/api/v1/tasks/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ goal })
+            });
+            const data = await resp.json();
+            if (data.ok) {
+              showToast(`Generated ${data.total} tasks (tier: ${data.tier})`, 'success');
+              renderTasks(data.tasks);
+            } else {
+              showToast('Error: ' + (data.error || 'unknown'), 'error');
+            }
+          } catch (e) {
+            showToast('Error generating tasks: ' + e.message, 'error');
+          } finally {
+            generateTasksBtn.innerHTML = 'Generate Tasks';
+            generateTasksBtn.disabled = false;
+          }
+        });
+      }
+
+      // Generate Tasks button in Tasks tab (delegates to same logic)
+      const generateTasksBtnTasks = document.getElementById('generateTasksBtnTasks');
+      if (generateTasksBtnTasks) {
+        generateTasksBtnTasks.addEventListener('click', () => generateTasksBtn?.click());
+      }
 
       // Clear terminal button
       const clearTerminalBtn = document.getElementById('clearTerminalBtn');
@@ -1004,46 +884,123 @@ filesRefreshBtn.addEventListener('click', loadFiles);
         clearTerminalBtn.addEventListener('click', clearTerminal);
       }
 
+      // Run button
+      const runBtn = document.getElementById('runBtn');
+      if (runBtn) {
+        runBtn.addEventListener('click', async () => {
+          runBtn.innerHTML = '<span class="spinner sm"></span> Running...';
+          runBtn.disabled = true;
+          try {
+            const res = await fetch('/api/v1/execute', { method: 'POST' });
+            const data = await res.json();
+            if (data.ok) {
+              showToast('Runner started (PID ' + data.pid + ')', 'success');
+            } else {
+              showToast('Runner error: ' + (data.output || 'unknown'), 'error');
+            }
+          } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+          } finally {
+            runBtn.innerHTML = 'Run ▶';
+            runBtn.disabled = false;
+          }
+        });
+      }
+
       // Engram buttons
       const installEngramBtn = document.getElementById('installEngramBtn');
       if (installEngramBtn) {
         installEngramBtn.addEventListener('click', installEngram);
       }
-      
+
       const testEngramBtn = document.getElementById('testEngramBtn');
       if (testEngramBtn) {
         testEngramBtn.addEventListener('click', testEngramConnection);
       }
 
-      // Send prompt button
-      if (sendPromptBtn) {
-        sendPromptBtn.addEventListener('click', async () => {
-          const prompt = promptInput.value.trim();
-          if (!prompt) return;
+      // API Keys panel
+      const checkApiKeys = async () => {
+        const badge = document.getElementById('apiKeysBadge');
+        const statusEl = document.getElementById('apiKeyStatus');
+        try {
+          const res = await fetch('/api/v1/config/env');
+          const data = await res.json();
+          const allSet = Object.values(data).every(v => v === 'set');
+          if (badge) {
+            badge.textContent = allSet ? 'Configured' : 'Missing keys';
+            badge.style.background = allSet ? 'rgba(34,197,94,0.15)' : 'rgba(251,191,36,0.15)';
+            badge.style.color = allSet ? '#4ade80' : '#fbbf24';
+          }
+          if (statusEl && data.OPENROUTER_API_KEY === 'set') {
+            statusEl.textContent = 'OpenRouter key is set';
+          }
+        } catch (_e) {}
+      };
 
-          await fetch('/api/v1/prompt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-          });
-          showToast('Prompt saved', 'success');
-        });
-
-        // Keyboard shortcut: Ctrl+Enter to save prompt
-        promptInput.addEventListener('keydown', (e) => {
-          if (e.ctrlKey && e.key === 'Enter') {
-            sendPromptBtn.click();
+      const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+      if (saveApiKeyBtn) {
+        saveApiKeyBtn.addEventListener('click', async () => {
+          const val = document.getElementById('openrouterKeyInput')?.value?.trim();
+          if (!val) { showToast('Enter a key first', 'error'); return; }
+          saveApiKeyBtn.disabled = true;
+          try {
+            const res = await fetch('/api/v1/config/env', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ OPENROUTER_API_KEY: val })
+            });
+            const data = await res.json();
+            if (data.ok) {
+              showToast('API key saved — active immediately', 'success');
+              document.getElementById('openrouterKeyInput').value = '';
+              checkApiKeys();
+            }
+          } catch (e) {
+            showToast('Error saving key: ' + e.message, 'error');
+          } finally {
+            saveApiKeyBtn.disabled = false;
           }
         });
       }
+
+      const toggleKeyVisibilityBtn = document.getElementById('toggleKeyVisibilityBtn');
+      if (toggleKeyVisibilityBtn) {
+        toggleKeyVisibilityBtn.addEventListener('click', () => {
+          const input = document.getElementById('openrouterKeyInput');
+          if (!input) return;
+          const isPassword = input.type === 'password';
+          input.type = isPassword ? 'text' : 'password';
+          toggleKeyVisibilityBtn.textContent = isPassword ? 'Hide' : 'Show';
+        });
+      }
+
+      // Config panel open/close
+      const configBtn = document.getElementById('configBtn');
+      const configPanel = document.getElementById('configPanel');
+      const configBackdrop = document.getElementById('configBackdrop');
+      const configCloseBtn = document.getElementById('configCloseBtn');
+
+      const openConfig = () => {
+        configPanel.classList.add('open');
+        configBackdrop.classList.add('open');
+      };
+
+      const closeConfig = () => {
+        configPanel.classList.remove('open');
+        configBackdrop.classList.remove('open');
+      };
+
+      configBtn.addEventListener('click', openConfig);
+      configCloseBtn.addEventListener('click', closeConfig);
+      configBackdrop.addEventListener('click', closeConfig);
 
       applyI18n();
       setActiveTab('prompt');
       loadInitial();
       loadSkills();
-      loadFiles();
       connectRealtime();
       checkEngramStatus();
+      checkApiKeys();
     </script>
   </body>
 </html>

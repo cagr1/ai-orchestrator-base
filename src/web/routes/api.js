@@ -1,4 +1,33 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
+// Keys that are allowed to be managed via the dashboard
+const MANAGED_KEYS = ['OPENROUTER_API_KEY'];
+
+const getEnvFilePath = () => path.join(process.cwd(), '.env');
+
+const readEnvFile = () => {
+  try {
+    return fs.readFileSync(getEnvFilePath(), 'utf-8');
+  } catch (_e) {
+    return '';
+  }
+};
+
+const writeEnvKey = (key, value) => {
+  const lines = readEnvFile().split('\n');
+  const idx = lines.findIndex(l => l.startsWith(`${key}=`));
+  const entry = `${key}=${value}`;
+  if (idx >= 0) {
+    lines[idx] = entry;
+  } else {
+    lines.push(entry);
+  }
+  fs.writeFileSync(getEnvFilePath(), lines.filter(l => l !== '').join('\n') + '\n', 'utf-8');
+  // Inject into current process so it takes effect immediately without restart
+  process.env[key] = value;
+};
 
 const registerApiRoutes = (app, { dashboard, realtime }) => {
   const router = express.Router();
@@ -14,6 +43,12 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
   router.post('/tasks', (req, res) => {
     const result = dashboard.createTask(req.body || {});
     realtime.broadcast('tasks:updated', result);
+    res.json(result);
+  });
+
+  router.post('/tasks/generate', async (req, res) => {
+    const { goal } = req.body || {};
+    const result = await dashboard.generateTasks(goal);
     res.json(result);
   });
 
@@ -47,6 +82,15 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
   router.post('/project/init', (req, res) => {
     const { goal, project_root } = req.body || {};
     res.json(dashboard.initProject(goal, project_root));
+  });
+
+  router.post('/project/start', (req, res) => {
+    const { goal, project_root } = req.body || {};
+    const initResult = dashboard.initProject(goal, project_root);
+    if (!initResult.ok) return res.json(initResult);
+    const runResult = dashboard.triggerRun();
+    realtime.broadcast('run:triggered', runResult);
+    res.json({ ok: true, init: initResult, run: runResult });
   });
 
   router.post('/prompt', (req, res) => {
@@ -156,6 +200,27 @@ router.get('/files/read', (req, res) => {
     } catch (err) {
       res.json({ ok: false, error: err.message });
     }
+  });
+
+  // API Key management
+  router.get('/config/env', (_req, res) => {
+    const status = {};
+    for (const key of MANAGED_KEYS) {
+      status[key] = process.env[key] ? 'set' : 'missing';
+    }
+    res.json(status);
+  });
+
+  router.post('/config/env', (req, res) => {
+    const updates = req.body || {};
+    const saved = [];
+    for (const key of MANAGED_KEYS) {
+      if (updates[key] !== undefined && String(updates[key]).trim() !== '') {
+        writeEnvKey(key, String(updates[key]).trim());
+        saved.push(key);
+      }
+    }
+    res.json({ ok: true, saved });
   });
 
   app.use('/api/v1', router);
