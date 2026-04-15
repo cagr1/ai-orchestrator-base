@@ -49,6 +49,9 @@
             <button class="nav-item" data-tab="skills" data-tooltip="Skills">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             </button>
+            <button class="nav-item" data-tab="execution" data-tooltip="Execution">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </button>
             <button class="nav-item" data-tab="stats" data-tooltip="Observe">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             </button>
@@ -57,23 +60,19 @@
 
       <section class="content">
         <section class="tab-panel active" id="tab-prompt">
-          <div class="execute-layout">
-            <div class="prompt-pane">
-              <textarea class="textbox execute-textarea" id="promptInput" placeholder="Write your project goal here...&#10;&#10;Example: Create a landing page for a security company with dark theme."></textarea>
-              <div class="execute-actions">
-                <button class="btn primary" id="createProjectBtn">Create Project</button>
-                <button class="btn accent" id="generateTasksBtn">Generate Tasks</button>
-                <button class="btn" id="runBtn">Run ▶</button>
-              </div>
+          <div class="prompt-pane-full">
+            <textarea class="textbox execute-textarea" id="promptInput" placeholder="Write your project goal here...&#10;&#10;Example: Create a landing page for a security company with dark theme."></textarea>
+            <div class="existing-project-row">
+              <label class="existing-project-toggle">
+                <input type="checkbox" id="existingProjectToggle" />
+                <span>Existing project</span>
+              </label>
+              <input type="text" class="textbox" id="existingProjectPath" placeholder="Project path (optional)" style="display:none;" />
             </div>
-            <div class="terminal-pane">
-              <div class="terminal-pane-header">
-                <span>Terminal Output</span>
-                <button class="btn ghost btn-small" id="clearTerminalBtn">Clear</button>
-              </div>
-              <div class="terminal-output" id="terminalOutput">
-                <div class="terminal-line muted">Terminal output will appear here when runner executes...</div>
-              </div>
+            <div class="execute-actions">
+              <button class="btn primary" id="createProjectBtn">Iniciar Proyecto</button>
+              <button class="btn accent" id="generateTasksBtn">Generar Plan</button>
+              <button class="btn" id="runBtn">Ejecutar ▶</button>
             </div>
           </div>
         </section>
@@ -224,8 +223,36 @@ description: ...
           </div>
         </section>
 
+        <section class="tab-panel" id="tab-execution">
+          <div class="panel-header" style="padding:12px 0 16px;display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="margin:0;">Execution</h2>
+            <div style="display:flex;gap:8px;">
+              <button class="btn" id="pauseRunBtn">Pause</button>
+              <button class="btn accent" id="resumeRunBtn">Resume</button>
+              <button class="btn ghost" id="refreshRunsBtn">Refresh</button>
+            </div>
+          </div>
+          <div id="runHistoryList">
+            <p class="muted empty-state">No run history yet.</p>
+          </div>
+        </section>
+
       </section>
     </main>
+
+    <!-- Persistent Terminal Panel -->
+    <div class="terminal-panel" id="terminalPanel">
+      <div class="terminal-panel-header">
+        <span>Terminal Output</span>
+        <div class="terminal-panel-controls">
+          <button class="btn ghost btn-small" id="clearTerminalBtn">Clear</button>
+          <button class="btn ghost btn-small" id="toggleTerminalBtn">▼</button>
+        </div>
+      </div>
+      <div class="terminal-output" id="terminalOutput">
+        <div class="terminal-line muted">Terminal output will appear here when runner executes...</div>
+      </div>
+    </div>
 
     <!-- Config Panel -->
     <div class="config-backdrop" id="configBackdrop"></div>
@@ -300,6 +327,14 @@ const promptInput = document.getElementById('promptInput');
       const skillSaveBtn = document.getElementById('skillSaveBtn');
       const projectPath = document.getElementById('projectPath');
       const projectSaveBtn = document.getElementById('projectSaveBtn');
+      const existingProjectToggle = document.getElementById('existingProjectToggle');
+      const existingProjectPath = document.getElementById('existingProjectPath');
+
+      if (existingProjectToggle && existingProjectPath) {
+        existingProjectToggle.addEventListener('change', () => {
+          existingProjectPath.style.display = existingProjectToggle.checked ? 'block' : 'none';
+        });
+      }
 
       const i18n = {
         en: {
@@ -323,6 +358,7 @@ const promptInput = document.getElementById('promptInput');
           tab_tasks: 'Tasks',
           tab_memory: 'Memory',
           tab_skills: 'Skills',
+          tab_execution: 'Execution',
           tab_stats: 'Observe',
           memory: 'Memory Search',
           memory_query: 'Search query',
@@ -362,6 +398,7 @@ const promptInput = document.getElementById('promptInput');
           tab_tasks: 'Tareas',
           tab_memory: 'Memoria',
           tab_skills: 'Skills',
+          tab_execution: 'Ejecución',
           tab_stats: 'Observar',
           memory: 'Búsqueda de memoria',
           memory_query: 'Consulta',
@@ -741,6 +778,7 @@ const connectRealtime = () => {
       const setActiveTab = (tab) => {
         tabs.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
         tabPanels.forEach(panel => panel.classList.toggle('active', panel.id === `tab-${tab}`));
+        if (tab === 'execution') loadRunHistory();
       };
 
       tabs.forEach(btn => {
@@ -993,6 +1031,78 @@ const connectRealtime = () => {
       configBtn.addEventListener('click', openConfig);
       configCloseBtn.addEventListener('click', closeConfig);
       configBackdrop.addEventListener('click', closeConfig);
+
+      const terminalPanel = document.getElementById('terminalPanel');
+      const toggleTerminalBtn = document.getElementById('toggleTerminalBtn');
+      if (terminalPanel && toggleTerminalBtn) {
+        terminalPanel.querySelector('.terminal-panel-header').addEventListener('click', () => {
+          terminalPanel.classList.toggle('collapsed');
+          toggleTerminalBtn.textContent = terminalPanel.classList.contains('collapsed') ? '▲' : '▼';
+        });
+      }
+
+      const renderRunHistory = (runs = []) => {
+        const container = document.getElementById('runHistoryList');
+        if (!runs.length) {
+          container.innerHTML = '<p class="muted empty-state">No run history yet.</p>';
+          return;
+        }
+        container.innerHTML = runs.map(run => {
+          const taskBadges = (run.tasks || []).map(t => {
+            const model = t.model || t.metadata?.model || '';
+            const cost = t.metadata?.cost || t.metadata?.tokens?.cost || '';
+            const duration = t.metadata?.duration || '';
+            const badges = [model && `<span class="run-badge model">${model}</span>`, cost && `<span class="run-badge cost">${cost}</span>`, duration && `<span class="run-badge duration">${duration}</span>`].filter(Boolean).join('');
+            return `<div class="run-task-item"><span class="run-task-id">${t.id}</span>${badges}<span class="run-task-state ${t.estado}">${t.estado}</span></div>`;
+          }).join('');
+          return `
+            <div class="run-entry" data-run-id="${run.run_id}">
+              <div class="run-entry-header">
+                <span class="run-id">${run.run_id}</span>
+                <span class="run-ts">${run.timestamp || ''}</span>
+                <span class="run-phase">${run.phase || '-'}</span>
+                <span class="run-status ${run.status}">${run.status || '-'}</span>
+                <span class="run-counts">${run.tasks_completed || 0}/${run.tasks_total || 0} done</span>
+              </div>
+              <div class="run-tasks">${taskBadges || '<span class="muted">no tasks</span>'}</div>
+            </div>
+          `;
+        }).join('');
+      };
+
+      const loadRunHistory = async () => {
+        try {
+          const res = await fetch('/api/v1/runs');
+          const runs = await res.json();
+          renderRunHistory(Array.isArray(runs) ? runs : []);
+        } catch (_e) {}
+      };
+
+      document.getElementById('refreshRunsBtn')?.addEventListener('click', loadRunHistory);
+
+      document.getElementById('pauseRunBtn')?.addEventListener('click', async () => {
+        try {
+          const res = await fetch('/api/v1/pause', { method: 'POST' });
+          const data = await res.json();
+          if (data.status === 'paused' || data.phase === 'paused') {
+            showToast('Run paused', 'success');
+          }
+        } catch (e) {
+          showToast('Error pausing: ' + e.message, 'error');
+        }
+      });
+
+      document.getElementById('resumeRunBtn')?.addEventListener('click', async () => {
+        try {
+          const res = await fetch('/api/v1/resume', { method: 'POST' });
+          const data = await res.json();
+          if (data.status === 'running' || data.phase === 'execution') {
+            showToast('Run resumed', 'success');
+          }
+        } catch (e) {
+          showToast('Error resuming: ' + e.message, 'error');
+        }
+      });
 
       applyI18n();
       setActiveTab('prompt');

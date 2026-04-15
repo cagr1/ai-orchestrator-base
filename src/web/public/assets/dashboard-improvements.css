@@ -143,16 +143,35 @@
 .terminal-line.success { color: #22c55e; }
 
 /* Terminal panel */
-.terminal-panel { grid-column: span 2; }
-.terminal-body { padding: 0; }
-.terminal-output {
+.terminal-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #0f172a;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+.terminal-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #1e293b;
+  cursor: pointer;
+}
+.terminal-panel-header span { font-size: 12px; font-weight: 600; }
+.terminal-panel-controls { display: flex; gap: 8px; }
+.terminal-panel.collapsed .terminal-output { display: none; }
+.terminal-panel .terminal-output {
   background: #0b1220;
-  border-radius: 12px;
   padding: 16px;
   font-family: monospace;
   font-size: 12px;
   line-height: 1.4;
-  max-height: 300px;
+  max-height: 250px;
   overflow-y: auto;
 }
 .terminal-output .terminal-line { margin: 4px 0; white-space: pre-wrap; word-break: break-all; }
@@ -160,7 +179,8 @@
 .terminal-output .terminal-line.stderr { color: #fbbf24; }
 .terminal-output .terminal-line.error { color: #ef4444; }
 .terminal-output .terminal-line.success { color: #22c55e; }
-.btn-small { padding: 4px 10px; font-size: 12px; }
+.terminal-output .terminal-line.info { color: #e2e8f0; }
+.terminal-output .terminal-line.warn { color: #fbbf24; }
 
 /* Kanban board */
 .kanban-board {
@@ -323,5 +343,52 @@
 .input-with-btn input { flex: 1; }
 .input-with-btn .btn { flex-shrink: 0; }
 
+/* Full-width prompt pane for Objective tab (no terminal) */
+.prompt-pane-full {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 16px;
+  min-height: 0;
+}
 
-</contents>
+.prompt-pane-full textarea {
+  flex: 1;
+  resize: none;
+  min-height: 200px;
+}
+
+.prompt-pane-full .execute-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.existing-project-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 8px 0;
+}
+
+.existing-project-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.existing-project-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.existing-project-row .textbox {
+  flex: 1;
+  max-width: 400px;
+}

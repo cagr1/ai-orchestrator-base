@@ -1,16 +1,16 @@
 {
   "version": "3.0",
-  "run_id": "construye-una-landig-20260415",
+  "run_id": "test-goal-20260415",
   "phase": "planning",
   "iteration": 0,
-  "max_iterations": 20,
+  "max_iterations": 50,
   "status": "running",
   "execution_control": {
     "tasks_completed": 0,
     "session_baseline_completed": 0,
     "max_tasks_per_run": 5,
     "last_checkpoint": 0,
-    "checkpoint_interval": 1,
+    "checkpoint_interval": 5,
     "cooldown_trigger": false,
     "consecutive_failures": 0
   },
@@ -23,6 +23,6 @@
     "locked_by": null,
     "ttl_seconds": 1800
   },
-  "last_updated": "2026-04-15T03:15:30.963Z",
-  "halt_reason": "no_tasks_planned"
+  "last_updated": "2026-04-15T16:03:21.154Z",
+  "halt_reason": null
 }

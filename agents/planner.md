@@ -1,4 +1,4 @@
-﻿# Planner Agent
+# Planner Agent
 
 ## Rol
 Recibe el **goal** del usuario desde [`system/goal.md`](system/goal.md) y genera el plan de ejecucion desglosado en [`system/plan.md`](system/plan.md) y las tareas en [`system/tasks.yaml`](system/tasks.yaml).
@@ -197,6 +197,13 @@ Crear [`system/tasks.yaml`](system/tasks.yaml) en formato YAML con **input/outpu
 6. Cada tarea debe tener criterios de aceptacion claros
 7. Definir dependencias entre tareas cuando aplique
 8. Asignar skill especifico a cada tarea
+
+## Reglas para Proyectos Existentes
+
+Cuando `existing_project=true`:
+- Las primeras tareas deben analizar la estructura del proyecto, dependencias y código clave antes de proponer modificaciones
+- EVITAR proponer recreación ciega de archivos - siempre extender/modificar archivos existentes en lugar de sobrescribir
+- Priorizar análisis de: archivos de configuración (package.json, *.csproj, *.sln, composer.json, requirements.txt, pyproject.toml), estructura de directorios, y dependencias del proyecto
 
 ## Prompt de Activacion
 

@@ -9,8 +9,8 @@ description: >-
   improving code structure, or adding unit/integration tests.
 mode: all
 tools:
-  bash: false
-  glob: false
+  bash: true
+  glob: true
   webfetch: false
   task: false
   todowrite: false

@@ -1,4 +1,4 @@
-﻿# Executor Agent
+# Executor Agent
 
 ## Rol
 Ejecuta una tarea especifica usando el skill asignado. Hace cambios REALES en archivos del proyecto.
@@ -15,6 +15,15 @@ Ejecuta una tarea especifica usando el skill asignado. Hace cambios REALES en ar
 6. **El runner crea un snapshot** de todos los archivos del proyecto ANTES de tu ejecucion
 7. **El runner compara hashes** DESPUES de tu ejecucion — no hay forma de falsificar esto
 8. **Si tu ejecucion es rechazada**, debes intentar de nuevo con cambios reales
+
+## REGLAS DE PROYECTO EXISTENTE
+
+> Cuando `existing_project: true`, estas reglas adicionalesse aplican para proteger la integridad del proyecto:
+
+9. **LEER antes de MODIFICAR** — Para todo archivo que vayas a editar, primero leelo completo para entender su estructura actual. No hagas cambios sin haber leido el archivo.
+10. **EXTENDER en lugar de SOBREESCRIBIR** — Cuando un archivo existe, agrega codigo al final o inserta dentro en lugar de reemplazar todo el contenido. El objetivo es preservar el trabajo previo.
+11. **EDICIONES DIF-AWARE** — Cuando modifiques un archivo existente, muestra los cambios como diff/unified format para que sean auditables. Evita recrear archivos completos cuando solo hay cambios menores.
+12. **NO recrear ciegamente** — Si un archivo tiene contenido existente, no lo sustituyas completo sin haberlo leido primero. Si el executor recibe solo rutas sin contexto previo, debe solicitar lectura del archivo antes de editarlo.
 
 ## Input
 - Tarea actual de [`system/tasks.md`](system/tasks.md) (id, descripcion, skill)

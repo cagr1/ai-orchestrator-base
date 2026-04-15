@@ -877,12 +877,8 @@ $ node runner.js status
 
 ## 📚 **Documentación Relacionada**
 
-- [`USAGE.md`](USAGE.md) - Guía operativa completa con ejemplos
-- [`TECHNICAL.md`](TECHNICAL.md) - Documentación técnica y arquitectura
-- [`DOCUMENTACION.md`](DOCUMENTACION.md) - Alcance de actualización v5
-- [`QUICKSTART.md`](QUICKSTART.md) - Guía rápida de inicio
-- [`PROMPTS.md`](PROMPTS.md) - Templates de prompts para agentes
 - [`system/CONTEXT.md`](system/CONTEXT.md) - Snapshot de contexto actual
+- [`CLAUDE.md`](CLAUDE.md) - Contexto para agentes IA
 
 **Planes de Implementación:**
 - [`plans/v3-deterministic-parallel-orchestrator-plan.md`](plans/v3-deterministic-parallel-orchestrator-plan.md) - Plan v3.0
@@ -938,6 +934,4 @@ $ node runner.js status
 
 ---
 
-**Versión:** 3.0.1 + v5 Features (Memoria + Autoskills + Dashboard)  
-**Última actualización:** 2026-04-08  
-**Estado:** ✅ Producción Ready con 30+ tests pasando
+**Versión:** 3.0.1 + v5 Features (Memoria + Autoskills + Dashboard)

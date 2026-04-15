@@ -173,3 +173,94 @@ metadata:
 } finally {
   restoreSystem(snapshot);
 }
+
+// ============================================================
+// REGRESSION TEST: No file change => task fails (Batch 3)
+// ============================================================
+function testNoFileChangeFailsTask() {
+  console.log('Testing: No real file change => task fails...');
+
+  const snapshot = backupSystem();
+  try {
+    run(`node ${RUNNER_QUOTED} init "NoChange Test"`);
+    run(`node ${RUNNER_QUOTED} plan "Create report"`);
+
+    const state = JSON.parse(readIfExists(path.join(SYSTEM, 'state.json')));
+    const runId = state ? state.run_id : 'nochange-test';
+
+    const plan = `
+# Plan
+
+## Run ID
+${runId}
+
+## Generado por
+planner.md  iteracion 0
+
+## Fases
+
+### FASE 1: Core
+- Objetivo: generate report
+- Skills: free_default
+- Criterio de salida: artefactos definidos
+
+## Dependencias entre fases
+FASE 1 depende de: -
+`.trim() + '\n';
+
+    fs.writeFileSync(path.join(SYSTEM, 'plan.md'), plan, 'utf-8');
+
+    const tasksYaml = `
+version: "3.0"
+generated_at: "2026-03-16T00:00:00Z"
+run_id: "${runId}"
+tasks:
+  - id: "T1"
+    title: "Generate report"
+    description: "Generate report output"
+    skill: "free_default"
+    estado: "pending"
+    priority: 1
+    depends_on: []
+    attempts: 0
+    max_attempts: 2
+    input: []
+    output: ["reports/summary.md"]
+metadata:
+  total_tasks: 1
+  completed: 0
+  pending: 1
+  failed: 0
+  blocked: 0
+`.trim() + '\n';
+
+    fs.writeFileSync(path.join(SYSTEM, 'tasks.yaml'), tasksYaml, 'utf-8');
+
+    const config = JSON.parse(readIfExists(path.join(SYSTEM, 'config.json')) || '{}');
+    config.evidence = { required: true, min_files_changed: 1, excluded_paths: ['system/'] };
+    config.review_criteria = { require_acceptance_criteria: false };
+    fs.writeFileSync(path.join(SYSTEM, 'config.json'), JSON.stringify(config, null, 2));
+
+    if (!fs.existsSync(path.join(ROOT, 'reports'))) {
+      fs.mkdirSync(path.join(ROOT, 'reports'), { recursive: true });
+    }
+    fs.writeFileSync(path.join(ROOT, 'reports', 'summary.md'), 'original content', 'utf-8');
+
+    run(`node ${RUNNER_QUOTED} run`);
+
+    const tasksDoc = readIfExists(path.join(SYSTEM, 'tasks.yaml'));
+    const tasksMatch = tasksDoc.match(/T1[\s\S]*?estado:\s*["']?([^"'\n]+)/);
+    const estado = tasksMatch ? tasksMatch[1] : null;
+
+    assert(estado !== 'done', 'Task T1 should NOT be marked done when no declared output changed');
+    assert(estado === 'failed', `Task T1 should be failed, got: ${estado}`);
+
+    console.log('✓ Task fails when no declared output file is modified');
+  } finally {
+    restoreSystem(snapshot);
+  }
+}
+
+if (require.main === module) {
+  testNoFileChangeFailsTask();
+}

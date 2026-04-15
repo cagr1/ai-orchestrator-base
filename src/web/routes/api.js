@@ -70,6 +70,22 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
     res.json(result);
   });
 
+  router.post('/pause', (_req, res) => {
+    const result = dashboard.applyControl({ status: 'paused', phase: 'paused' });
+    realtime.broadcast('control:updated', result);
+    res.json(result);
+  });
+
+  router.post('/resume', (_req, res) => {
+    const result = dashboard.applyControl({ status: 'running', phase: 'execution' });
+    realtime.broadcast('control:updated', result);
+    res.json(result);
+  });
+
+  router.get('/runs', (_req, res) => {
+    res.json(dashboard.getRunHistory());
+  });
+
   router.get('/project', (_req, res) => {
     res.json(dashboard.getDashboardConfig());
   });

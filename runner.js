@@ -87,6 +87,31 @@ const ensureDir = (dirPath) => {
 
 const nowIso = () => new Date().toISOString();
 
+const getFileContentHash = (absolutePath) => {
+  try {
+    if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) {
+      return null;
+    }
+    const content = fs.readFileSync(absolutePath);
+    return crypto.createHash('sha256').update(content).digest('hex');
+  } catch (_e) {
+    return null;
+  }
+};
+
+const snapshotOutputFileHashes = (relativePaths = []) => {
+  const snapshot = {};
+  const uniquePaths = [...new Set((Array.isArray(relativePaths) ? relativePaths : []).filter(Boolean))];
+  uniquePaths.forEach((relativePath) => {
+    const absolutePath = path.join(ROOT_DIR, relativePath);
+    snapshot[relativePath] = getFileContentHash(absolutePath);
+  });
+  return snapshot;
+};
+
+const getChangedOutputPaths = (beforeSnapshot = {}, afterSnapshot = {}) =>
+  Object.keys(afterSnapshot).filter((relativePath) => beforeSnapshot[relativePath] !== afterSnapshot[relativePath] && afterSnapshot[relativePath] !== null);
+
 const redactText = (text, config) => {
   const enabled = config?.redaction?.enabled !== false;
   if (!enabled || !text) return text || '';
@@ -509,12 +534,46 @@ const buildPlanRequest = (state, tasksDoc, config, newPrompt) => {
   return lines.join('\n');
 };
 
+const getExistingOutputContext = (outputPath) => {
+  const absolutePath = path.join(ROOT_DIR, outputPath);
+  if (!fs.existsSync(absolutePath)) return null;
+  const content = readFile(absolutePath);
+  if (!content) return null;
+  const hash = getFileContentHash(absolutePath);
+  const maxExcerptLen = 500;
+  const excerpt = content.length > maxExcerptLen
+    ? content.slice(0, maxExcerptLen) + '...'
+    : content;
+  return { path: outputPath, hash, excerpt };
+};
+
 const buildExecutionPrompt = (task) => {
   const outputs = Array.isArray(task.output) ? task.output.filter(Boolean) : [];
-  return [
+  const existingContexts = [];
+  for (const outputPath of outputs) {
+    const ctx = getExistingOutputContext(outputPath);
+    if (ctx) {
+      existingContexts.push(ctx);
+    }
+  }
+
+  const promptParts = [
     'You are a senior software engineer.',
     'Return ONLY valid JSON. No explanations.',
-    '',
+    ''
+  ];
+
+  if (existingContexts.length > 0) {
+    promptParts.push('EXISTING FILE CONTEXT (modify rather than recreate):');
+    for (const ctx of existingContexts) {
+      promptParts.push(`[${ctx.path}] hash=${ctx.hash}`);
+      promptParts.push(ctx.excerpt);
+      promptParts.push('---');
+    }
+    promptParts.push('');
+  }
+
+  promptParts.push(
     '{',
     '  "files": [',
     '    {',
@@ -535,32 +594,13 @@ const buildExecutionPrompt = (task) => {
     '',
     'If you need multiple files, include all of them.',
     'Do not include any text outside JSON.'
-  ].join('\n');
+  );
+
+  return promptParts.join('\n');
 };
 
 const runLLM = async (prompt, skill = null) => {
-  const config = readJSON(CONFIG_FILE);
-  const providerConfig = config.providers?.[config.active_provider];
-  
-  if (!providerConfig) {
-    throw new Error(`Provider ${config.active_provider} not configured`);
-  }
-  
-  if (providerConfig.type === 'openrouter') {
-    // Determine model based on skill
-    const modelMapping = config.model_mapping || {};
-    const modelKey = modelMapping[skill] || modelMapping.default || 'free_default';
-    const model = providerConfig.models?.[modelKey];
-    
-    if (!model) {
-      throw new Error(`Model ${modelKey} not configured for provider ${config.active_provider}`);
-    }
-    
-    const result = await callOpenRouter(prompt, model);
-    return result;
-  }
-  
-  throw new Error(`Unsupported provider type: ${providerConfig.type}`);
+  return await callOpenRouter(prompt, skill);
 };
 
 // ============================================================
@@ -1946,6 +1986,12 @@ if (AUTO_EXECUTE) {
             if (!parsed.files || !Array.isArray(parsed.files)) {
               throw new Error('Output missing files array');
             }
+
+            const declaredOutputPaths = Array.isArray(task.output) ? task.output.filter(Boolean) : [];
+            if (declaredOutputPaths.length === 0) {
+              throw new Error(`Task ${task.id} has no declared output files to verify`);
+            }
+            const beforeOutputSnapshot = snapshotOutputFileHashes(declaredOutputPaths);
             
             // Write files
             const ROOT_DIR = __dirname;
@@ -1956,9 +2002,8 @@ if (AUTO_EXECUTE) {
               }
               
               // Ensure output path is within allowed outputs
-              const outputPaths = Array.isArray(task.output) ? task.output : [];
-              if (outputPaths.length > 0 && !outputPaths.includes(file.path)) {
-                console.warn(`[EXEC WARN] ${task.id}: File ${file.path} not in allowed outputs ${outputPaths.join(', ')}`);
+              if (!declaredOutputPaths.includes(file.path)) {
+                console.warn(`[EXEC WARN] ${task.id}: File ${file.path} not in allowed outputs ${declaredOutputPaths.join(', ')}`);
               }
               
               const filePath = path.join(ROOT_DIR, file.path);
@@ -1966,6 +2011,13 @@ if (AUTO_EXECUTE) {
               fs.writeFileSync(filePath, file.content, 'utf-8');
               console.log(`[EXEC WRITE] ${task.id}: Created ${file.path}`);
             }
+
+            const afterOutputSnapshot = snapshotOutputFileHashes(declaredOutputPaths);
+            const changedOutputPaths = getChangedOutputPaths(beforeOutputSnapshot, afterOutputSnapshot);
+            if (changedOutputPaths.length === 0) {
+              throw new Error(`No declared output files were modified for task ${task.id}`);
+            }
+            console.log(`[EXEC VERIFY] ${task.id}: Modified declared outputs -> ${changedOutputPaths.join(', ')}`);
             
             console.log(`[EXEC] Completed task ${task.id}`);
             
@@ -1977,8 +2029,8 @@ if (AUTO_EXECUTE) {
             // Create evidence
             const evidence = {
               task_id: task.id,
-              files_changed: parsed.files.map(f => f.path),
-              summary: `Generated ${parsed.files.length} file(s)`,
+              files_changed: changedOutputPaths,
+              summary: `Generated/updated ${changedOutputPaths.length} declared output file(s)`,
               llm_model: task.skill,
               timestamp: new Date().toISOString()
             };

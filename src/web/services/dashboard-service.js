@@ -297,6 +297,43 @@ const triggerRun = () => {
     return memoryManager.search({ query, project, limit: 10 });
   };
 
+  const getRunHistory = () => {
+    const { activeRoot } = getPaths();
+    const runsDir = path.join(activeRoot, 'system', 'runs');
+    if (!fs.existsSync(runsDir)) return [];
+    const entries = [];
+    const runDirs = fs.readdirSync(runsDir).sort().reverse();
+    for (const dir of runDirs) {
+      const runPath = path.join(runsDir, dir);
+      if (!fs.statSync(runPath).isDirectory()) continue;
+      const historyFile = path.join(runPath, 'history.log');
+      const taskFile = path.join(runPath, 'tasks.yaml');
+      let meta = { run_id: dir };
+      if (fs.existsSync(historyFile)) {
+        const lines = fs.readFileSync(historyFile, 'utf-8').trim().split('\n');
+        const last = lines[lines.length - 1] || '';
+        const parts = last.split(' | ');
+        meta.timestamp = parts[0] || '';
+        meta.phase = parts[1]?.replace('phase=', '') || '';
+        meta.status = parts[2]?.replace('status=', '') || '';
+        const completed = parts[3]?.match(/completed=(\d+)/)?.[1] || '0';
+        const failed = parts[5]?.match(/failed=(\d+)/)?.[1] || '0';
+        meta.tasks_completed = parseInt(completed, 10);
+        meta.tasks_failed = parseInt(failed, 10);
+      }
+      if (fs.existsSync(taskFile)) {
+        try {
+          const doc = yaml.load(fs.readFileSync(taskFile, 'utf-8'));
+          meta.tasks_total = doc.tasks?.length || 0;
+          meta.tasks = doc.tasks || [];
+        } catch (_e) {}
+      }
+      entries.push(meta);
+      if (entries.length >= 20) break;
+    }
+    return entries;
+  };
+
   const generateTasks = async (goal) => {
     const { configFile, stateFile } = getPaths();
     const config = readJSON(configFile) || readJSON(path.join(rootDir, 'system', 'config.json')) || {};
@@ -328,7 +365,8 @@ const triggerRun = () => {
     writeProjectFile,
     refreshSkills,
     detectSkills,
-    searchMemory
+    searchMemory,
+    getRunHistory
   };
 };
 
