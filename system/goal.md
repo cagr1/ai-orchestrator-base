@@ -1,3 +1,3 @@
 # Goal
 
-construye una landign page para un servicio de seguridad llamado CISEPRO
+realiza un landign page para una emrepsa de seguridad E:\Carlos\Development Tools\Proyectos\Agents\ai-orchestrator-base

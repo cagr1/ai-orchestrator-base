@@ -147,7 +147,7 @@ COMPLETED TASKS: ${completed.map(t => t.title || t.id).join(', ') || 'none'}`;
 
   let rawOutput;
   try {
-    rawOutput = await callOpenRouter(prompt, model);
+    rawOutput = await callOpenRouter(prompt, modelKey);
   } catch (err) {
     return { ok: false, error: `LLM call failed: ${err.message}` };
   }

@@ -100,13 +100,17 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
     res.json(dashboard.initProject(goal, project_root));
   });
 
-  router.post('/project/start', (req, res) => {
+  router.post('/project/start', async (req, res) => {
     const { goal, project_root } = req.body || {};
     const initResult = dashboard.initProject(goal, project_root);
-    if (!initResult.ok) return res.json(initResult);
+    if (!initResult.ok) return res.json({ ok: false, stage: 'init', error: initResult.output || initResult });
+    const planResult = await dashboard.generateTasks(goal);
+    if (!planResult.ok) return res.json({ ok: false, stage: 'plan', error: planResult.error || planResult });
+    const tasks = planResult.tasks || [];
+    if (tasks.length === 0) return res.json({ ok: false, stage: 'plan', error: 'no_tasks_planned' });
     const runResult = dashboard.triggerRun();
     realtime.broadcast('run:triggered', runResult);
-    res.json({ ok: true, init: initResult, run: runResult });
+    res.json({ ok: true, init: initResult, plan: planResult, run: runResult });
   });
 
   router.post('/prompt', (req, res) => {

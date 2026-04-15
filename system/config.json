@@ -243,7 +243,7 @@
         "free_basic": "minimax/minimax-m2.5:free",
         "free_advanced": "qwen/qwen3.6-plus:free",
         "free_reasoning": "stepfun/step-3.5-flash:free",
-        "low_cost_coding": "deepseek/deepseek-v3.2",
+        "low_cost_coding": "minimax/minimax-m2.7",
         "low_cost_general": "x-ai/grok-4.1-fast",
         "low_cost_context": "moonshotai/kimi-k2.5",
         "low_cost_code": "qwen/qwen3-coder-next",

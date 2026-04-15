@@ -8,9 +8,6 @@ const { generateTasks: autoGenerateTasks } = require('../../integrations/auto-pl
 const RUNNER = path.join(__dirname, '../../..', 'runner.js');
 
 const createDashboardService = ({ rootDir, realtime, websocket }) => {
-  const systemDir = path.join(rootDir, 'system');
-  const dashboardFile = path.join(systemDir, 'dashboard.json');
-
   const getActiveRoot = () => {
     const cfg = getDashboardConfig();
     return cfg.project_root || rootDir;
@@ -25,8 +22,14 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
       tasksFile: path.join(activeSystem, 'tasks.yaml'),
       skillsIndexFile: path.join(activeSystem, 'skills_index.json'),
       memoryFile: path.join(activeSystem, 'memory.md'),
-      configFile: path.join(activeSystem, 'config.json')
+      configFile: path.join(activeSystem, 'config.json'),
+      dashboardFile: path.join(activeSystem, 'dashboard.json')
     };
+  };
+
+  const getDashboardConfig = () => {
+    const df = path.join(rootDir, 'system', 'dashboard.json');
+    return readJSON(df) || { project_root: rootDir, prompt: '' };
   };
 
   const readJSON = (file) => {
@@ -106,7 +109,8 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
 
 const triggerRun = () => {
     try {
-      const child = spawn('node', [RUNNER, 'run'], { cwd: rootDir });
+      const { activeRoot } = getPaths();
+      const child = spawn('node', [RUNNER, 'run', '--root', activeRoot], { cwd: activeRoot });
       
       child.stdout.on('data', (data) => {
         const output = data.toString();
@@ -120,11 +124,18 @@ const triggerRun = () => {
       
       child.on('close', (code) => {
         broadcast('terminal:closed', { code });
+        broadcast('status:updated', getStatus());
+        broadcast('tasks:updated', getTasks());
       });
       
       child.on('error', (err) => {
         broadcast('terminal:error', { error: err.message });
+        broadcast('status:updated', getStatus());
+        broadcast('tasks:updated', getTasks());
       });
+
+      broadcast('status:updated', getStatus());
+      broadcast('tasks:updated', getTasks());
       
       return { ok: true, pid: child.pid, message: 'Runner started' };
     } catch (e) {
@@ -142,12 +153,14 @@ const triggerRun = () => {
     return state;
   };
 
-  const getDashboardConfig = () => readJSON(dashboardFile) || { project_root: rootDir, prompt: '' };
-
   const updateDashboardConfig = (payload) => {
     const current = getDashboardConfig();
     const next = { ...current, ...payload };
-    fs.writeFileSync(dashboardFile, JSON.stringify(next, null, 2));
+    if (next.project_root) {
+      next.project_root = path.resolve(next.project_root);
+    }
+    const df = path.join(rootDir, 'system', 'dashboard.json');
+    fs.writeFileSync(df, JSON.stringify(next, null, 2));
     return next;
   };
 
@@ -159,11 +172,12 @@ const triggerRun = () => {
   };
 
   const initProject = (goal, projectRoot) => {
+    if (!projectRoot) return { ok: false, output: 'project_root is required' };
     try {
-      const next = updateDashboardConfig({ project_root: projectRoot || getActiveRoot() });
+      const next = updateDashboardConfig({ project_root: projectRoot });
       ensureProjectRoot(next.project_root);
-      const output = execSync(`node "${RUNNER}" init "${goal || 'Define project goal here'}"`, {
-        cwd: rootDir,
+      const output = execSync(`node "${RUNNER}" init "${goal || 'Define project goal here'}" --root "${next.project_root}"`, {
+        cwd: next.project_root,
         timeout: 15000,
         encoding: 'utf-8'
       });
@@ -335,10 +349,10 @@ const triggerRun = () => {
   };
 
   const generateTasks = async (goal) => {
-    const { configFile, stateFile } = getPaths();
-    const config = readJSON(configFile) || readJSON(path.join(rootDir, 'system', 'config.json')) || {};
-    const state = readJSON(stateFile) || readJSON(path.join(rootDir, 'system', 'state.json')) || {};
-    const systemDir = path.join(rootDir, 'system');
+    const { configFile, stateFile, activeRoot } = getPaths();
+    const config = readJSON(configFile) || readJSON(path.join(activeRoot, 'system', 'config.json')) || {};
+    const state = readJSON(stateFile) || readJSON(path.join(activeRoot, 'system', 'state.json')) || {};
+    const systemDir = path.join(activeRoot, 'system');
     const effectiveGoal = goal || state.goal || getDashboardConfig().prompt || 'Build a web project';
     const result = await autoGenerateTasks({ goal: effectiveGoal, systemDir, config, state });
     if (result.ok) broadcast('tasks:updated', result.tasks);

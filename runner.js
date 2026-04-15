@@ -16,7 +16,16 @@ const callOpenRouter = require('./providers/openrouter');
 const { createMemoryManager } = require('./src/integrations/memory-manager');
 const { runAutoskills } = require('./src/integrations/autoskills-adapter');
 
-const ROOT_DIR = __dirname;
+const ACTIVE_ROOT = (() => {
+  const args = process.argv.slice(2);
+  const rootFlagIndex = args.indexOf('--root');
+  if (rootFlagIndex !== -1 && args[rootFlagIndex + 1]) {
+    return args[rootFlagIndex + 1];
+  }
+  return __dirname;
+})();
+
+const ROOT_DIR = ACTIVE_ROOT;
 const SYSTEM_DIR = path.join(ROOT_DIR, 'system');
 const GOAL_FILE = path.join(SYSTEM_DIR, 'goal.md');
 const PLAN_FILE = path.join(SYSTEM_DIR, 'plan.md');
@@ -1734,7 +1743,7 @@ const printStatus = () => {
 
   const runtimeConfig = loadRuntimeConfig();
   applyRuntimeConfigToState(state, runtimeConfig);
-  
+
   console.log('[STATUS] Current run state');
   console.log(`- run_id: ${state.run_id || '-'}`);
   console.log(`- version: ${state.version}`);
@@ -1750,17 +1759,18 @@ const printStatus = () => {
 const main = async () => {
   const args = process.argv.slice(2);
   const command = (args[0] || '').toLowerCase();
-  
+
   console.log('\n[RUNNER] Agent System Runner v3.0');
   console.log('====================================\n');
-  
+
   if (command === 'init') {
-    const goal = args.slice(1).join(' ').trim() || 'Define project goal here';
+    const initArgs = args.filter(arg => arg !== '--root');
+    const goal = initArgs.slice(1).join(' ').trim() || 'Define project goal here';
     const config = readJSON(CONFIG_FILE) || {};
-    
+
     ensureDir(SYSTEM_DIR);
     writeFile(GOAL_FILE, `# Goal\n\n${goal}\n`);
-    
+
     const state = initializeState(goal, config);
     memoryManager.setSessionContext({
       sessionId: state.run_id,
@@ -1768,19 +1778,18 @@ const main = async () => {
       directory: ROOT_DIR
     });
     initializeTasks(state.run_id);
-    // Initialize a cheap context snapshot for future runs.
     writeContextSnapshot(state, loadTasks());
     writeStatusDashboard(state, loadTasks());
     appendEvent('init', { run_id: state.run_id });
     applyRetentionPolicies();
-    
+
     console.log(`[INIT] New run initialized: ${state.run_id}`);
     console.log('[INIT] Phase: planning');
     console.log('[INIT] Tasks template created');
     console.log('\n[END] Run: node runner.js run\n');
     return;
   }
-  
+
   if (command === 'status') {
     printStatus();
     console.log('\n[END] Runner finished\n');
@@ -1992,9 +2001,8 @@ if (AUTO_EXECUTE) {
               throw new Error(`Task ${task.id} has no declared output files to verify`);
             }
             const beforeOutputSnapshot = snapshotOutputFileHashes(declaredOutputPaths);
-            
+
             // Write files
-            const ROOT_DIR = __dirname;
             for (const file of parsed.files) {
               if (!file.path || !file.content) {
                 console.warn(`[EXEC WARN] ${task.id}: Skipping invalid file entry`);
@@ -2051,6 +2059,8 @@ if (AUTO_EXECUTE) {
           const saved = saveTasksWithLock(tasksDoc, tasksHash);
           if (!saved.ok) {
             console.warn('[WARN] Could not save tasks (lock expired or hash mismatch)');
+          } else {
+            tasksHash = computeFileHash(TASKS_FILE);
           }
         }
       }
@@ -2071,6 +2081,8 @@ if (AUTO_EXECUTE) {
           state.phase = 'needs_review';
           state.status = 'needs_review';
           state.halt_reason = saved.reason;
+        } else {
+          tasksHash = computeFileHash(TASKS_FILE);
         }
       }
       appendEvent('batch_ready', { run_id: state.run_id, batch_size: batch.length });
