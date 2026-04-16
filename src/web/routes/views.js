@@ -6,10 +6,13 @@ const registerViewRoutes = (app, { dashboard }) => {
   });
 
   app.get('/dashboard/data', (_req, res) => {
+    const snapshot = dashboard.getSnapshot();
+    const project = dashboard.getDashboardConfig();
+    const runHistory = dashboard.getRunHistory();
     res.json({
-      status: dashboard.getStatus(),
-      tasks: dashboard.getTasks(),
-      project: dashboard.getDashboardConfig()
+      snapshot,
+      project,
+      runHistory
     });
   });
 

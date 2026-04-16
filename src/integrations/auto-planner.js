@@ -86,6 +86,7 @@ INSTRUCTIONS:
 - "estado" must always be "pending".
 - "priority": 1 (highest) to 5 (lowest).
 - "depends_on": list IDs of tasks that must finish first.
+- Each task "output" must list at most 2 specific file paths (no directory wildcards like /src or /public). Split large project scaffolds across multiple tasks so each task writes 1–2 files.
 
 REQUIRED YAML SCHEMA:
 \`\`\`yaml
@@ -117,6 +118,8 @@ const extractYaml = (text) => {
   return match ? match[1].trim() : text.trim();
 };
 
+const REQUIRED_TASK_FIELDS = ['id', 'title', 'description', 'skill', 'estado', 'priority', 'depends_on', 'input', 'output'];
+
 const generateTasks = async ({ goal, systemDir, config, state }) => {
   const tier = detectTier(goal, config.skill_triggers);
   const skills = (config.skills_enabled || {})[tier] || (config.skills_enabled || {}).basic || [];
@@ -147,35 +150,73 @@ COMPLETED TASKS: ${completed.map(t => t.title || t.id).join(', ') || 'none'}`;
 
   let rawOutput;
   try {
-    rawOutput = await callOpenRouter(prompt, modelKey);
+    console.log(`[PLANNER] model_key=${modelKey} model=${model}`);
+    rawOutput = await callOpenRouter(prompt, config, modelKey);
   } catch (err) {
+    console.error(`[PLANNER] LLM call failed model_key=${modelKey} model=${model}: ${err.message}`);
     return { ok: false, error: `LLM call failed: ${err.message}` };
   }
 
   if (!rawOutput) {
+    console.error('[PLANNER] Empty response from LLM');
     return { ok: false, error: 'LLM returned empty response' };
   }
+  console.log(`[PLANNER] raw_response_length=${rawOutput.length}`);
+  console.log(`[PLANNER] raw_response_snippet=${JSON.stringify(rawOutput.slice(0, 240))}`);
 
   const yamlText = extractYaml(rawOutput);
   let tasksDoc;
   try {
     tasksDoc = yaml.load(yamlText);
   } catch (parseErr) {
+    console.error(`[PLANNER] YAML parse failed: ${parseErr.message}`);
     return { ok: false, error: `YAML parse failed: ${parseErr.message}`, raw: rawOutput };
   }
 
+  const parsedCount = Array.isArray(tasksDoc?.tasks) ? tasksDoc.tasks.length : 0;
+  console.log(`[PLANNER] parsed_task_count=${parsedCount}`);
   if (!tasksDoc || !Array.isArray(tasksDoc.tasks) || tasksDoc.tasks.length === 0) {
-    return { ok: false, error: 'LLM did not return a valid tasks list', raw: rawOutput };
+    const discardReason = !tasksDoc
+      ? 'tasks_doc_missing'
+      : !Array.isArray(tasksDoc.tasks)
+      ? 'tasks_not_array'
+      : 'tasks_empty';
+    console.error(`[PLANNER] discard_reason=${discardReason}`);
+    return { ok: false, error: 'LLM did not return a valid tasks list', discard_reason: discardReason, raw: rawOutput };
   }
+
+  const validTasks = tasksDoc.tasks.filter((task) => {
+    if (!task || typeof task !== 'object') return false;
+    return REQUIRED_TASK_FIELDS.every((field) => task[field] !== undefined);
+  });
+  const discardedInvalid = tasksDoc.tasks.length - validTasks.length;
+  if (discardedInvalid > 0) {
+    console.warn(`[PLANNER] discarded_invalid_tasks=${discardedInvalid}`);
+  }
+  if (validTasks.length === 0) {
+    console.error('[PLANNER] discard_reason=all_tasks_invalid_schema');
+    return { ok: false, error: 'Planner produced tasks but none passed schema validation', discard_reason: 'all_tasks_invalid_schema', raw: rawOutput };
+  }
+
+  tasksDoc.tasks = validTasks;
+  tasksDoc.metadata = {
+    ...(tasksDoc.metadata || {}),
+    total_tasks: validTasks.length,
+    completed: 0,
+    pending: validTasks.length,
+    failed: 0,
+    blocked: 0
+  };
 
   const tasksFile = path.join(systemDir, 'tasks.yaml');
   fs.writeFileSync(tasksFile, yaml.dump(tasksDoc, { indent: 2 }), 'utf-8');
+  console.log(`[PLANNER] persisted_tasks_count=${validTasks.length} file=${tasksFile}`);
 
   return {
     ok: true,
     tier,
-    tasks: tasksDoc.tasks,
-    total: tasksDoc.tasks.length
+    tasks: validTasks,
+    total: validTasks.length
   };
 };
 

@@ -33,6 +33,7 @@ const TASKS_FILE = path.join(SYSTEM_DIR, 'tasks.yaml');
 const MEMORY_FILE = path.join(SYSTEM_DIR, 'memory.md');
 const STATE_FILE = path.join(SYSTEM_DIR, 'state.json');
 const CONFIG_FILE = path.join(SYSTEM_DIR, 'config.json');
+const ORCHESTOS_CONFIG_FILE = path.join(__dirname, 'system', 'config.json');
 const CONTEXT_FILE = path.join(SYSTEM_DIR, 'context.md');
 const PLAN_REQUEST_FILE = path.join(SYSTEM_DIR, 'plan_request.md');
 const EVENTS_FILE = path.join(SYSTEM_DIR, 'events.log');
@@ -601,15 +602,16 @@ const buildExecutionPrompt = (task) => {
     'You MUST only write files inside:',
     outputs.length ? outputs.join(', ') : '(none)',
     '',
-    'If you need multiple files, include all of them.',
+    'Generate at most 2 files per response. If the task logically requires more,',
+    'emit only the single most critical file — prefer config/manifest files first.',
     'Do not include any text outside JSON.'
   );
 
   return promptParts.join('\n');
 };
 
-const runLLM = async (prompt, skill = null) => {
-  return await callOpenRouter(prompt, skill);
+const runLLM = async (prompt, config, skill = null) => {
+  return await callOpenRouter(prompt, config, skill);
 };
 
 // ============================================================
@@ -680,7 +682,11 @@ const saveState = (state) => {
 // ============================================================
 
 const loadRuntimeConfig = () => {
-  return readJSON(CONFIG_FILE) || {};
+  const runtimeConfig = readJSON(CONFIG_FILE);
+  if (runtimeConfig && Object.keys(runtimeConfig).length > 0) {
+    return runtimeConfig;
+  }
+  return readJSON(ORCHESTOS_CONFIG_FILE) || {};
 };
 
 const applyRuntimeConfigToState = (state, config) => {
@@ -1835,7 +1841,7 @@ const main = async () => {
       }
 
       const tasksDoc = normalizeTasksDoc(loadTasks());
-      const tasksHash = computeFileHash(TASKS_FILE);
+      let tasksHash = computeFileHash(TASKS_FILE);
 
       // Planning gate: `run` needs tasks planned first.
       if (state.phase === 'planning' && tasksDoc.tasks.length === 0) {
@@ -1913,7 +1919,6 @@ const main = async () => {
       // Refresh context snapshot each run (cheap, small).
       writeContextSnapshot(state, tasksDoc);
       writeStatusDashboard(state, tasksDoc);
-      appendRunHistory(state, tasksDoc, 'run');
 
       if (!canExecuteMoreTasks(state)) {
         console.log(`[HALT] ${state.halt_reason}`);
@@ -1968,30 +1973,101 @@ const main = async () => {
         console.log('');
       });
 
-if (AUTO_EXECUTE) {
-        let anyTaskUpdated = false;
+      let anyTaskUpdated = false;
+      if (AUTO_EXECUTE) {
         
         for (const task of batch) {
           try {
             console.log(`[EXEC] Running task ${task.id}`);
             const prompt = buildExecutionPrompt(task);
-            const llmOutput = await runLLM(prompt, task.skill);
-            
-            // Parse JSON output
+            const llmOutput = await runLLM(prompt, runtimeConfig, task.skill);
+            const rawOutput = llmOutput || '';
+
+            // 1. Persist raw output unconditionally before any parsing attempt.
+            const evidenceDir = path.join(SYSTEM_DIR, 'evidence');
+            ensureDir(evidenceDir);
+            fs.writeFileSync(
+              path.join(evidenceDir, `${task.id}.raw.txt`),
+              rawOutput,
+              'utf-8'
+            );
+
+            // 2. Clean: strip markdown fences, isolate the JSON object by
+            //    taking the substring from first '{' to last '}'.
+            const fenceStripped = rawOutput
+              .replace(/```(?:json|JSON)?\s*/g, '')
+              .replace(/```/g, '');
+            const firstBrace = fenceStripped.indexOf('{');
+            const lastBrace  = fenceStripped.lastIndexOf('}');
+
+            // DEBUG: log parse context to diagnose failures
+            console.log(`[DEBUG PARSE] task=${task.id} rawLen=${rawOutput.length} fenceLen=${fenceStripped.length}`);
+            console.log(`[DEBUG PARSE] rawFirst100=${JSON.stringify(rawOutput.slice(0, 100))}`);
+            console.log(`[DEBUG PARSE] rawLast100=${JSON.stringify(rawOutput.slice(-100))}`);
+            console.log(`[DEBUG PARSE] firstBrace=${firstBrace} lastBrace=${lastBrace}`);
+
+            let candidate;
+            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+              candidate = fenceStripped.slice(firstBrace, lastBrace + 1).trim();
+            } else {
+              // Fallback: fence-stripping may have displaced brace indices (e.g. preamble
+              // `}` before the JSON, or stray fence chars). Scan rawOutput directly with
+              // a greedy regex — identical to the recovery path the old parser used.
+              console.log(`[DEBUG PARSE] primary brace detection failed (firstBrace=${firstBrace} lastBrace=${lastBrace}), trying fallback regex on rawOutput`);
+              const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
+              if (!jsonMatch) {
+                const errData = {
+                  task_id: task.id,
+                  error: 'No JSON object delimiters found in LLM output',
+                  raw_snippet: rawOutput.slice(0, 300),
+                  debug: { rawLen: rawOutput.length, fenceLen: fenceStripped.length, firstBrace, lastBrace }
+                };
+                fs.writeFileSync(
+                  path.join(evidenceDir, `${task.id}.parse-error.json`),
+                  JSON.stringify(errData, null, 2),
+                  'utf-8'
+                );
+                console.error(`[EXEC PARSE FAIL] ${task.id}: ${errData.error}`);
+                throw new Error(errData.error);
+              }
+              console.log(`[DEBUG PARSE] fallback matched at index=${jsonMatch.index} len=${jsonMatch[0].length}`);
+              candidate = jsonMatch[0];
+            }
+
+            // 3. Parse — with one minimal recovery pass for trailing commas.
             let parsed;
             try {
-              parsed = JSON.parse(llmOutput);
-            } catch (parseErr) {
-              // Try to extract JSON if there's extra text
-              const jsonMatch = llmOutput.match(/\{[\s\S]*\}/);
-              if (jsonMatch) {
-                parsed = JSON.parse(jsonMatch[0]);
-              } else {
-                throw new Error(`Invalid JSON output: ${llmOutput.slice(0, 100)}...`);
+              parsed = JSON.parse(candidate);
+            } catch (e1) {
+              // Remove trailing commas before ] or } (common LLM mistake).
+              const recovered = candidate.replace(/,\s*([}\]])/g, '$1');
+              try {
+                parsed = JSON.parse(recovered);
+              } catch (e2) {
+                // Detect truncation: valid JSON starts with '{' but token limit cut it
+                // off before the closing '}' was emitted.
+                const isTruncated = candidate.trimStart().startsWith('{') &&
+                                    !candidate.trimEnd().endsWith('}');
+                const errorMsg = isTruncated
+                  ? `LLM output truncated or incomplete for task ${task.id}`
+                  : `JSON parse failed for task ${task.id}: ${e2.message}`;
+                const errData = {
+                  task_id: task.id,
+                  error: errorMsg,
+                  truncated: isTruncated,
+                  raw_snippet: rawOutput.slice(0, 500)
+                };
+                fs.writeFileSync(
+                  path.join(evidenceDir, `${task.id}.parse-error.json`),
+                  JSON.stringify(errData, null, 2),
+                  'utf-8'
+                );
+                console.error(`[EXEC PARSE FAIL] ${task.id}: ${errorMsg}`);
+                throw new Error(errorMsg);
               }
             }
-            
-            // Validate structure
+
+            // 4. Validate structure.
             if (!parsed.files || !Array.isArray(parsed.files)) {
               throw new Error('Output missing files array');
             }
@@ -2002,18 +2078,15 @@ if (AUTO_EXECUTE) {
             }
             const beforeOutputSnapshot = snapshotOutputFileHashes(declaredOutputPaths);
 
-            // Write files
+            // 5. Write files — only reached when parse succeeded.
             for (const file of parsed.files) {
               if (!file.path || !file.content) {
                 console.warn(`[EXEC WARN] ${task.id}: Skipping invalid file entry`);
                 continue;
               }
-              
-              // Ensure output path is within allowed outputs
               if (!declaredOutputPaths.includes(file.path)) {
                 console.warn(`[EXEC WARN] ${task.id}: File ${file.path} not in allowed outputs ${declaredOutputPaths.join(', ')}`);
               }
-              
               const filePath = path.join(ROOT_DIR, file.path);
               fs.mkdirSync(path.dirname(filePath), { recursive: true });
               fs.writeFileSync(filePath, file.content, 'utf-8');
@@ -2026,15 +2099,11 @@ if (AUTO_EXECUTE) {
               throw new Error(`No declared output files were modified for task ${task.id}`);
             }
             console.log(`[EXEC VERIFY] ${task.id}: Modified declared outputs -> ${changedOutputPaths.join(', ')}`);
-            
             console.log(`[EXEC] Completed task ${task.id}`);
-            
-            // Mark task as done
-            task.estado = 'done';
-            updateTask(tasksDoc, task);
+
+            updateTask(tasksDoc, task.id, { estado: 'done' });
             anyTaskUpdated = true;
-            
-            // Create evidence
+
             const evidence = {
               task_id: task.id,
               files_changed: changedOutputPaths,
@@ -2042,20 +2111,24 @@ if (AUTO_EXECUTE) {
               llm_model: task.skill,
               timestamp: new Date().toISOString()
             };
-            const evidenceFile = path.join(SYSTEM_DIR, 'evidence', `${task.id}.json`);
-            fs.mkdirSync(path.dirname(evidenceFile), { recursive: true });
-            fs.writeFileSync(evidenceFile, JSON.stringify(evidence, null, 2), 'utf-8');
-            
+            fs.writeFileSync(
+              path.join(evidenceDir, `${task.id}.json`),
+              JSON.stringify(evidence, null, 2),
+              'utf-8'
+            );
+
           } catch (err) {
             console.error(`[EXEC ERROR] ${task.id}: ${err?.message || err}`);
-            task.estado = 'failed';
-            updateTask(tasksDoc, task);
+            updateTask(tasksDoc, task.id, { estado: 'failed' });
             anyTaskUpdated = true;
           }
         }
         
         // Save tasks if any were updated
         if (anyTaskUpdated) {
+          // Recalculate dependency-driven states (blocked <-> pending) after task completions.
+          tasksDoc.tasks = recalculateTaskStates(tasksDoc.tasks);
+          updateTaskMetadata(tasksDoc);
           const saved = saveTasksWithLock(tasksDoc, tasksHash);
           if (!saved.ok) {
             console.warn('[WARN] Could not save tasks (lock expired or hash mismatch)');
@@ -2075,16 +2148,7 @@ if (AUTO_EXECUTE) {
       state.iteration += 1;
       state.halt_reason = 'batch_ready';
 
-      {
-        const saved = saveTasksWithLock(tasksDoc, tasksHash);
-        if (!saved.ok) {
-          state.phase = 'needs_review';
-          state.status = 'needs_review';
-          state.halt_reason = saved.reason;
-        } else {
-          tasksHash = computeFileHash(TASKS_FILE);
-        }
-      }
+      appendRunHistory(state, tasksDoc, 'batch_executed');
       appendEvent('batch_ready', { run_id: state.run_id, batch_size: batch.length });
       
     } finally {

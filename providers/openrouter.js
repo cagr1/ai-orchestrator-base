@@ -1,25 +1,9 @@
-const fs = require('fs');
-const path = require('path');
-
-const readJSON = (filepath) => {
-  try {
-    const content = fs.readFileSync(filepath, 'utf-8');
-    const sanitized = content.replace(/^\uFEFF/, '');
-    return JSON.parse(sanitized);
-  } catch (_e) {
-    return null;
-  }
-};
-
-const CONFIG_FILE = path.join(__dirname, '..', 'system', 'config.json');
-
-const callOpenRouter = async (prompt, skill = null) => {
+const callOpenRouter = async (prompt, config, skill = null) => {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is not set');
   }
 
-  const config = readJSON(CONFIG_FILE);
   const providerConfig = config?.providers?.[config.active_provider];
 
   if (!providerConfig) {

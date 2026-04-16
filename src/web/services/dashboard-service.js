@@ -10,7 +10,8 @@ const RUNNER = path.join(__dirname, '../../..', 'runner.js');
 const createDashboardService = ({ rootDir, realtime, websocket }) => {
   const getActiveRoot = () => {
     const cfg = getDashboardConfig();
-    return cfg.project_root || rootDir;
+    if (!cfg.project_root) return null;
+    return path.resolve(cfg.project_root);
   };
 
   const getPaths = () => {
@@ -29,7 +30,7 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
 
   const getDashboardConfig = () => {
     const df = path.join(rootDir, 'system', 'dashboard.json');
-    return readJSON(df) || { project_root: rootDir, prompt: '' };
+    return readJSON(df) || { project_root: '', prompt: '' };
   };
 
   const readJSON = (file) => {
@@ -68,6 +69,37 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
     return doc.tasks || [];
   };
 
+  const getSnapshot = () => {
+    const { stateFile, tasksFile } = getPaths();
+    const state = readJSON(stateFile) || { status: 'unknown' };
+    const doc = readYAML(tasksFile) || { tasks: [], metadata: {} };
+    const tasks = doc.tasks || [];
+    const meta = doc.metadata || {};
+
+    const completedIds = new Set(
+      tasks.filter(t => t.estado === 'done').map(t => t.id)
+    );
+    const ejecutables = tasks.filter(t => {
+      if (t.estado !== 'pending') return false;
+      return (t.depends_on || []).every(depId => completedIds.has(depId));
+    });
+
+    return {
+      state,
+      tasks,
+      task_counts: {
+        total: meta.total_tasks || tasks.length,
+        completed: meta.completed || tasks.filter(t => t.estado === 'done').length,
+        pending: meta.pending || tasks.filter(t => t.estado === 'pending').length,
+        running: meta.running || tasks.filter(t => t.estado === 'running').length,
+        failed: meta.failed || tasks.filter(t => t.estado === 'failed').length,
+        blocked: meta.blocked || tasks.filter(t => t.estado === 'blocked').length
+      },
+      halt_reason: state.halt_reason || null,
+      ejecutables: ejecutables.length
+    };
+  };
+
   const createTask = (payload) => {
     const { tasksFile } = getPaths();
     const doc = readYAML(tasksFile) || { version: '3.0', tasks: [], metadata: {} };
@@ -90,54 +122,65 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
     doc.metadata.total_tasks = tasks.length;
     doc.metadata.pending = (doc.metadata.pending || 0) + 1;
     writeYAML(tasksFile, doc);
-    broadcast('tasks:updated', tasks);
+    broadcast('snapshot:updated', getSnapshot());
     return task;
   };
 
   const updateTask = (taskId, payload) => {
     const { tasksFile } = getPaths();
-    const doc = readYAML(tasksFile) || { tasks: [] };
+    const doc = readYAML(tasksFile) || { version: '3.0', tasks: [], metadata: {} };
     const tasks = doc.tasks || [];
     const task = tasks.find(t => t.id === taskId);
     if (!task) return { error: 'task_not_found' };
 
     Object.assign(task, payload);
+    task.updated_at = new Date().toISOString();
+    doc.metadata = doc.metadata || {};
+    doc.metadata.total_tasks = tasks.length;
+    doc.metadata.completed = tasks.filter(t => t.estado === 'done').length;
+    doc.metadata.pending = tasks.filter(t => t.estado === 'pending').length;
+    doc.metadata.failed = tasks.filter(t => t.estado === 'failed').length;
+    doc.metadata.blocked = tasks.filter(t => t.estado === 'blocked').length;
     writeYAML(tasksFile, doc);
-    broadcast('tasks:updated', tasks);
+    broadcast('snapshot:updated', getSnapshot());
     return task;
   };
 
-const triggerRun = () => {
+  const triggerRun = (command = 'run') => {
     try {
       const { activeRoot } = getPaths();
-      const child = spawn('node', [RUNNER, 'run', '--root', activeRoot], { cwd: activeRoot });
-      
+      if (!activeRoot) {
+        return { ok: false, output: 'No valid project_root set. Please set a valid project root path.' };
+      }
+      const validCommands = ['run', 'resume'];
+      if (!validCommands.includes(command)) {
+        command = 'run';
+      }
+      const child = spawn('node', [RUNNER, command, '--root', activeRoot], { cwd: activeRoot });
+
       child.stdout.on('data', (data) => {
         const output = data.toString();
         broadcast('terminal:output', { type: 'stdout', data: output });
       });
-      
+
       child.stderr.on('data', (data) => {
         const output = data.toString();
         broadcast('terminal:output', { type: 'stderr', data: output });
       });
-      
+
       child.on('close', (code) => {
         broadcast('terminal:closed', { code });
-        broadcast('status:updated', getStatus());
-        broadcast('tasks:updated', getTasks());
-      });
-      
-      child.on('error', (err) => {
-        broadcast('terminal:error', { error: err.message });
-        broadcast('status:updated', getStatus());
-        broadcast('tasks:updated', getTasks());
+        broadcast('snapshot:updated', getSnapshot());
       });
 
-      broadcast('status:updated', getStatus());
-      broadcast('tasks:updated', getTasks());
-      
-      return { ok: true, pid: child.pid, message: 'Runner started' };
+      child.on('error', (err) => {
+        broadcast('terminal:error', { error: err.message });
+        broadcast('snapshot:updated', getSnapshot());
+      });
+
+      broadcast('snapshot:updated', getSnapshot());
+
+      return { ok: true, pid: child.pid, message: `Runner ${command} started` };
     } catch (e) {
       return { ok: false, output: e.message };
     }
@@ -149,14 +192,20 @@ const triggerRun = () => {
     if (payload.status) state.status = payload.status;
     if (payload.phase) state.phase = payload.phase;
     fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
-    broadcast('status:updated', state);
+    broadcast('snapshot:updated', getSnapshot());
     return state;
   };
 
   const updateDashboardConfig = (payload) => {
     const current = getDashboardConfig();
     const next = { ...current, ...payload };
-    if (next.project_root) {
+    if (next.project_root !== undefined) {
+      if (!next.project_root) {
+        return { error: 'project_root cannot be empty' };
+      }
+      if (!path.isAbsolute(next.project_root)) {
+        return { error: 'project_root must be an absolute path' };
+      }
       next.project_root = path.resolve(next.project_root);
     }
     const df = path.join(rootDir, 'system', 'dashboard.json');
@@ -321,7 +370,6 @@ const triggerRun = () => {
       const runPath = path.join(runsDir, dir);
       if (!fs.statSync(runPath).isDirectory()) continue;
       const historyFile = path.join(runPath, 'history.log');
-      const taskFile = path.join(runPath, 'tasks.yaml');
       let meta = { run_id: dir };
       if (fs.existsSync(historyFile)) {
         const lines = fs.readFileSync(historyFile, 'utf-8').trim().split('\n');
@@ -334,13 +382,10 @@ const triggerRun = () => {
         const failed = parts[5]?.match(/failed=(\d+)/)?.[1] || '0';
         meta.tasks_completed = parseInt(completed, 10);
         meta.tasks_failed = parseInt(failed, 10);
-      }
-      if (fs.existsSync(taskFile)) {
-        try {
-          const doc = yaml.load(fs.readFileSync(taskFile, 'utf-8'));
-          meta.tasks_total = doc.tasks?.length || 0;
-          meta.tasks = doc.tasks || [];
-        } catch (_e) {}
+        const pending = parts[4]?.match(/pending=(\d+)/)?.[1] || '0';
+        meta.tasks_pending = parseInt(pending, 10);
+        const total = (meta.tasks_completed || 0) + (meta.tasks_failed || 0) + (meta.tasks_pending || 0);
+        meta.tasks_total = total || meta.tasks_completed || 0;
       }
       entries.push(meta);
       if (entries.length >= 20) break;
@@ -348,9 +393,32 @@ const triggerRun = () => {
     return entries;
   };
 
+  const getEffectiveConfig = () => {
+    const { configFile, activeRoot } = getPaths();
+    const config = readJSON(configFile);
+    if (!config) return null;
+    const activeProvider = config.active_provider || 'openrouter';
+    const providerConfig = (config.providers || {})[activeProvider] || {};
+    const modelMapping = config.model_mapping || {};
+    const resolved = {};
+    for (const [role, key] of Object.entries(modelMapping)) {
+      resolved[role] = {
+        key,
+        model: providerConfig.models?.[key] || null
+      };
+    }
+    return {
+      active_provider: activeProvider,
+      model_mapping: resolved,
+      provider_models: providerConfig.models || {}
+    };
+  };
+
   const generateTasks = async (goal) => {
     const { configFile, stateFile, activeRoot } = getPaths();
-    const config = readJSON(configFile) || readJSON(path.join(activeRoot, 'system', 'config.json')) || {};
+    const activeConfig = readJSON(configFile);
+    const repoConfig = readJSON(path.join(rootDir, 'system', 'config.json'));
+    const config = (activeConfig && Object.keys(activeConfig).length > 0) ? activeConfig : (repoConfig || {});
     const state = readJSON(stateFile) || readJSON(path.join(activeRoot, 'system', 'state.json')) || {};
     const systemDir = path.join(activeRoot, 'system');
     const effectiveGoal = goal || state.goal || getDashboardConfig().prompt || 'Build a web project';
@@ -360,8 +428,10 @@ const triggerRun = () => {
   };
 
   return {
+    getActiveRoot,
     getStatus,
     getTasks,
+    getSnapshot,
     createTask,
     updateTask,
     triggerRun,
@@ -380,7 +450,8 @@ const triggerRun = () => {
     refreshSkills,
     detectSkills,
     searchMemory,
-    getRunHistory
+    getRunHistory,
+    getEffectiveConfig
   };
 };
 

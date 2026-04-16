@@ -69,6 +69,10 @@
               </label>
               <input type="text" class="textbox" id="existingProjectPath" placeholder="Project path (optional)" style="display:none;" />
             </div>
+            <div class="project-root-inline" style="margin-top:8px;">
+              <label class="label" style="font-size:12px;color:var(--muted);">Project root path</label>
+              <input type="text" class="textbox" id="inlineProjectRoot" placeholder="e.g. /Users/name/my-project (or leave empty to use Config)" style="font-size:13px;" />
+            </div>
             <div class="execute-actions">
               <button class="btn primary" id="createProjectBtn">Iniciar Proyecto</button>
               <button class="btn accent" id="generateTasksBtn">Generar Plan</button>
@@ -264,12 +268,10 @@ description: ...
       <div class="config-panel-body">
 
         <section class="config-section">
-          <h3>Project Root</h3>
-          <p class="small muted">Directory for AgentOS to operate on.</p>
-          <div class="input-with-btn">
-            <input class="textbox" id="projectPath" placeholder="/Users/name/project" />
-            <button class="file-picker-btn" id="browseFolderBtn">Browse</button>
-          </div>
+          <h3>Target project root</h3>
+          <p class="small muted">External project path</p>
+          <p class="small muted">OrchestOS runs against this folder</p>
+          <input class="textbox" id="projectPath" placeholder="/Users/name/project" />
           <button class="btn ghost btn-small" id="projectSaveBtn" style="margin-top:8px;align-self:flex-start;">Save</button>
         </section>
 
@@ -287,18 +289,25 @@ description: ...
           </div>
         </section>
 
-        <section class="config-section">
+<section class="config-section">
           <h3>Memory Provider <span class="header-badge" id="memoryProviderBadge">checking...</span></h3>
           <div id="engramStatus">
             <p class="muted">Checking memory provider...</p>
           </div>
           <div id="engramInstructions" style="display:none;margin-top:12px;">
-            <p class="small muted" style="margin-bottom:8px;">Engram is optional — local file memory is the fallback and all features work without it.</p>
+            <p class="small muted">Engram is optional — local file memory is the fallback and all features work without it.</p>
             <div id="engramInstallInstructions" style="display:none;background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;font-family:monospace;color:var(--muted);white-space:pre-wrap;"></div>
             <div style="display:flex;gap:8px;">
               <button class="btn ghost btn-small" id="installEngramBtn">How to install</button>
               <button class="btn ghost btn-small" id="testEngramBtn">Test connection</button>
             </div>
+          </div>
+        </section>
+
+        <section class="config-section">
+          <h3>Runtime Config</h3>
+          <div id="runtimeConfigDisplay">
+            <p class="muted">Loading...</p>
           </div>
         </section>
 
@@ -445,7 +454,7 @@ const setKanbanLoading = (loading) => {
           }
         };
 
-        const renderTasks = (tasks = []) => {
+        const renderTasks = (tasks = [], taskCounts = null) => {
         if (!tasks.length) {
           document.getElementById('kanban-pending').innerHTML =
             '<p class="muted empty-state">No tasks yet — add tasks manually or click <strong>Generate Tasks</strong>.</p>';
@@ -453,9 +462,17 @@ const setKanbanLoading = (loading) => {
             const col = document.getElementById(`kanban-${state}`);
             if (col) col.innerHTML = '<p class="muted empty-state">No tasks</p>';
           });
-          document.querySelectorAll('.kanban-count').forEach(count => {
-            count.textContent = '0';
-          });
+          if (taskCounts) {
+            document.getElementById('pendingCount').textContent = String(taskCounts.pending || 0);
+            document.getElementById('runningCount').textContent = String(taskCounts.running || 0);
+            document.getElementById('doneCount').textContent = String(taskCounts.completed || 0);
+            document.getElementById('failedCount').textContent = String(taskCounts.failed || 0);
+            document.getElementById('blockedCount').textContent = String(taskCounts.blocked || 0);
+          } else {
+            document.querySelectorAll('.kanban-count').forEach(count => {
+              count.textContent = '0';
+            });
+          }
           return;
         }
 
@@ -468,12 +485,20 @@ const setKanbanLoading = (loading) => {
           blocked: tasks.filter(t => t.estado === 'blocked')
         };
 
-        // Update counts
-        document.getElementById('pendingCount').textContent = String(groups.pending.length);
-        document.getElementById('runningCount').textContent = String(groups.running.length);
-        document.getElementById('doneCount').textContent = String(groups.done.length);
-        document.getElementById('failedCount').textContent = String(groups.failed.length);
-        document.getElementById('blockedCount').textContent = String(groups.blocked.length);
+        // Update counts - use provided counts if available
+        if (taskCounts) {
+          document.getElementById('pendingCount').textContent = String(taskCounts.pending || 0);
+          document.getElementById('runningCount').textContent = String(taskCounts.running || 0);
+          document.getElementById('doneCount').textContent = String(taskCounts.completed || 0);
+          document.getElementById('failedCount').textContent = String(taskCounts.failed || 0);
+          document.getElementById('blockedCount').textContent = String(taskCounts.blocked || 0);
+        } else {
+          document.getElementById('pendingCount').textContent = String(groups.pending.length);
+          document.getElementById('runningCount').textContent = String(groups.running.length);
+          document.getElementById('doneCount').textContent = String(groups.done.length);
+          document.getElementById('failedCount').textContent = String(groups.failed.length);
+          document.getElementById('blockedCount').textContent = String(groups.blocked.length);
+        }
 
         // Render each column
         Object.entries(groups).forEach(([state, groupTasks]) => {
@@ -581,7 +606,7 @@ const setKanbanLoading = (loading) => {
       };
 
       const renderStatus = (state) => {
-        const s = state.status || 'unknown';
+        const s = state?.status || 'unknown';
         statusValue.textContent = s;
         statusValue.className = `header-badge status-badge ${s}`;
       };
@@ -590,10 +615,13 @@ const setKanbanLoading = (loading) => {
         setKanbanLoading(true);
         const res = await fetch('/dashboard/data');
         const data = await res.json();
-        renderStatus(data.status || {});
-        renderTasks(data.tasks || []);
+        const snapshot = data.snapshot || {};
+        const state = snapshot.state || {};
+        renderStatus(state);
+        renderTasks(data.tasks || [], snapshot.task_counts);
         if (data.project?.prompt) promptInput.value = data.project.prompt;
         if (data.project?.project_root) projectPath.value = data.project.project_root;
+        if (data.runHistory) renderRunHistory(data.runHistory);
       };
 
       const loadSkills = async () => {
@@ -753,25 +781,25 @@ const connectRealtime = () => {
          const source = new WebSocket(`${location.origin.replace('http', 'ws')}/api/v1/ws`);
          source.addEventListener('message', (e) => {
            const msg = JSON.parse(e.data);
-           if (msg.event === 'tasks:updated') {
-             renderTasks(Array.isArray(msg.payload) ? msg.payload : []);
-             logEvent('tasks updated');
-           }
-           if (msg.event === 'status:updated') {
-             renderStatus(msg.payload || {});
-             logEvent('status updated');
+           if (msg.event === 'snapshot:updated') {
+             const snapshot = msg.payload || {};
+             const state = snapshot.state || {};
+             const taskCounts = snapshot.task_counts || null;
+             renderStatus(state);
+             renderTasks(msg.payload?.tasks || [], taskCounts);
+             logEvent('snapshot updated');
            }
            if (msg.event === 'terminal:output') {
              addTerminalOutput(msg.payload.type || 'stdout', msg.payload.data || '');
            }
            if (msg.event === 'terminal:closed') {
-              addTerminalOutput('info', `Process exited with code: ${msg.payload.code}`);
-              loadRunHistory();
-            }
-            if (msg.event === 'terminal:error') {
-              addTerminalOutput('error', `Error: ${msg.payload.error}`);
-              loadRunHistory();
-            }
+               addTerminalOutput('info', `Process exited with code: ${msg.payload.code}`);
+               loadRunHistory();
+             }
+             if (msg.event === 'terminal:error') {
+               addTerminalOutput('error', `Error: ${msg.payload.error}`);
+               loadRunHistory();
+             }
            if (msg.event === 'run:triggered') logEvent('run triggered');
            if (msg.event === 'control:updated') logEvent('control updated');
          });
@@ -812,11 +840,22 @@ const connectRealtime = () => {
       memorySearchBtn.addEventListener('click', searchMemory);
 
       projectSaveBtn.addEventListener('click', async () => {
-        await fetch('/api/v1/project', {
+        const val = projectPath.value.trim();
+        if (!val) {
+          showToast('Enter a project path first', 'error');
+          return;
+        }
+        const res = await fetch('/api/v1/project', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_root: projectPath.value })
+          body: JSON.stringify({ project_root: val })
         });
+        const data = await res.json();
+        if (data.error) {
+          showToast('Error: ' + data.error, 'error');
+        } else {
+          showToast('Project path saved', 'success');
+        }
       });
 
       // Toast notification function
@@ -833,34 +872,7 @@ const connectRealtime = () => {
         }, 3000);
       };
 
-      // Browse folder
-      document.getElementById('browseFolderBtn').addEventListener('click', () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.webkitdirectory = true;
-        input.onchange = (e) => {
-          const files = e.target.files;
-          if (files.length > 0) {
-            let folderPath = '';
-            if (files[0].webkitRelativePath) {
-              folderPath = files[0].webkitRelativePath.split('/')[0];
-            }
-            if (!folderPath && files[0].name) {
-              const firstFile = files[0];
-              const pathMatch = firstFile.webkitRelativePath || '';
-              const segments = pathMatch.split('/');
-              folderPath = segments.length > 1 ? segments.slice(0, -1).join('/') : '';
-            }
-            if (folderPath) {
-              document.getElementById('projectPath').value = folderPath;
-              showToast('Folder selected: ' + folderPath, 'success');
-            } else {
-              showToast('Could not determine folder path', 'error');
-            }
-          }
-        };
-        input.click();
-      });
+
 
       // Create Project button handler
       document.getElementById('createProjectBtn').addEventListener('click', async () => {
@@ -873,9 +885,13 @@ const connectRealtime = () => {
         btn.innerHTML = '<span class="spinner sm"></span> Creating...';
         btn.disabled = true;
         try {
-          const projectRoot = document.getElementById('projectPath').value.trim();
+          let projectRoot = document.getElementById('inlineProjectRoot').value.trim();
           if (!projectRoot) {
-            showToast('Please set a project root path first', 'error');
+            projectRoot = document.getElementById('projectPath').value.trim();
+          }
+          if (!projectRoot) {
+            showToast('Set a project root path in the field below or in Config', 'error');
+            document.getElementById('inlineProjectRoot').focus();
             return;
           }
           const resp = await fetch('/api/v1/project/start', {
@@ -994,6 +1010,29 @@ const connectRealtime = () => {
           }
         } catch (_e) {}
       };
+      const loadRuntimeConfigDisplay = async () => {
+        const container = document.getElementById('runtimeConfigDisplay');
+        if (!container) return;
+        try {
+          const res = await fetch('/api/v1/config/runtime');
+          const data = await res.json();
+          if (data.error) {
+            container.innerHTML = '<p class="muted">No runtime config available.</p>';
+            return;
+          }
+          const lines = [];
+          lines.push(`<p class="small"><strong>Active Provider:</strong> ${data.active_provider || '-'}</p>`);
+          if (data.model_mapping) {
+            lines.push('<p class="small" style="margin-top:8px;"><strong>Model Mapping:</strong></p>');
+            for (const [role, info] of Object.entries(data.model_mapping)) {
+              lines.push(`<p class="small" style="margin-left:12px;">${role}: ${info.model || info.key || '-'}</p>`);
+            }
+          }
+          container.innerHTML = lines.join('');
+        } catch (e) {
+          container.innerHTML = '<p class="muted">Failed to load runtime config.</p>';
+        }
+      };
 
       const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
       if (saveApiKeyBtn) {
@@ -1012,6 +1051,7 @@ const connectRealtime = () => {
               showToast('API key saved — active immediately', 'success');
               document.getElementById('openrouterKeyInput').value = '';
               checkApiKeys();
+              loadRuntimeConfigDisplay();
             }
           } catch (e) {
             showToast('Error saving key: ' + e.message, 'error');
@@ -1134,3 +1174,4 @@ const connectRealtime = () => {
     </script>
   </body>
 </html>
+

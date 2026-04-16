@@ -59,7 +59,21 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
   });
 
   router.post('/execute', (_req, res) => {
-    const result = dashboard.triggerRun();
+    const activeRoot = dashboard.getActiveRoot();
+    if (!activeRoot) {
+      return res.json({ ok: false, output: 'No valid project_root set' });
+    }
+    const result = dashboard.triggerRun('run');
+    realtime.broadcast('run:triggered', result);
+    res.json(result);
+  });
+
+  router.post('/resume', (_req, res) => {
+    const activeRoot = dashboard.getActiveRoot();
+    if (!activeRoot) {
+      return res.json({ ok: false, output: 'No valid project_root set' });
+    }
+    const result = dashboard.triggerRun('resume');
     realtime.broadcast('run:triggered', result);
     res.json(result);
   });
@@ -76,12 +90,6 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
     res.json(result);
   });
 
-  router.post('/resume', (_req, res) => {
-    const result = dashboard.applyControl({ status: 'running', phase: 'execution' });
-    realtime.broadcast('control:updated', result);
-    res.json(result);
-  });
-
   router.get('/runs', (_req, res) => {
     res.json(dashboard.getRunHistory());
   });
@@ -92,6 +100,9 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
 
   router.post('/project', (req, res) => {
     const result = dashboard.updateDashboardConfig({ project_root: req.body?.project_root });
+    if (result.error) {
+      return res.status(400).json(result);
+    }
     res.json(result);
   });
 
@@ -171,8 +182,8 @@ router.get('/files/read', (req, res) => {
     try {
       const { memoryFile, configFile } = dashboard.getPaths?.() || {};
       const { createMemoryManager } = require('../../integrations/memory-manager');
-      const memoryManager = createMemoryManager({ memoryFile, configFile });
-      const config = memoryManager.getConfig?.();
+      const mm = createMemoryManager({ memoryFile, configFile });
+      const config = mm.getConfig?.();
       
       if (config?.provider === 'engram') {
         const client = memoryManager.getEngramClient?.();
@@ -241,6 +252,10 @@ router.get('/files/read', (req, res) => {
       }
     }
     res.json({ ok: true, saved });
+  });
+
+  router.get('/config/runtime', (_req, res) => {
+    res.json(dashboard.getEffectiveConfig() || { error: 'no_config' });
   });
 
   app.use('/api/v1', router);
