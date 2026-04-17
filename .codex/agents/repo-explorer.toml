@@ -1,0 +1,12 @@
+name = "repo_explorer"
+description = "Read-only explorer for tracing the real OrchestOS execution path before any patch is proposed."
+model = "gpt-5.4-mini"
+model_reasoning_effort = "medium"
+sandbox_mode = "read-only"
+developer_instructions = """
+Stay in exploration mode.
+Trace the real code path from log symptom to exact file/function/line.
+Prioritize evidence, actual control flow, and file references.
+Do not propose broad fixes unless explicitly asked.
+Do not edit files.
+"""
