@@ -106,12 +106,37 @@ First clean closure confirmed 2026-04-21. Active blocker is now output integrati
 
 ### P6 — VELOCIDAD: Cada iteración = proceso nuevo + LLM secuencial + sin streaming
 **Síntoma**: 6-8 minutos para 6 tareas simples. Realtime feed muestra gaps de 4-7 minutos entre snapshots.
-**Causas identificadas**:
-1. Cada `run` = nuevo proceso Node.js spawneado (overhead de startup por iteración)
-2. Tareas ejecutadas secuencialmente dentro del batch aunque el sistema declara soporte paralelo
-3. Modelo `moonshotai/kimi-k2.6` puede tener latencia alta en OpenRouter
-4. Sin streaming — el sistema espera la respuesta completa antes de continuar
-**No requiere cambio de arquitectura ahora** — pero sí requiere auditar `config.json` para usar modelos más rápidos para tareas simples (frontend-html-basic no necesita kimi-k2.6).
+
+**Diagnóstico arquitectónico** (revisión 2026-04-21):
+
+El banner `🟢 BATCH PARALELO` que imprime el runner es un nombre falso — el loop en `runner.js:2078` es un `for...of` con `await` secuencial. El nombre del campo `parallel_batch` en `state.json` no corresponde a ninguna ejecución paralela real. Este mismatch hace el problema invisible en los logs.
+
+**Causas rankeadas por impacto real**:
+
+1. **Loop secuencial dentro del batch — ARQUITECTURAL (impacto dominante)**
+   `runner.js:2078` — cada tarea espera a que la anterior termine. Con `max_batch_size=3` y 60-90 s por LLM call, 3 tareas cuestan 180-270 s en secuencia, vs ~90 s en paralelo. Este es el cuello de botella principal.
+   **Bloqueador para resolverlo**: race condition en escritura de `tasks.yaml`. Bajo `Promise.all` real, dos tareas compartirían el mismo `tasksDoc` en memoria, lo mutarían concurrentemente, y el segundo `saveTasksWithLock` perdería los cambios del primero silenciosamente (last-writer-wins con hash check).
+
+2. **Un solo modelo para todas las skills — CONFIGURACIÓN (impacto alto, riesgo cero)**
+   `system/config.json` → `model_mapping` enruta todas las skills a `"base"` → mismo modelo lento para planning y para un HTML simple. Cambiar skills de baja complejidad (`frontend-html-basic`, `ux`) a un modelo más rápido reduce latencia por task sin tocar código. La infraestructura (`model_mapping` en `openrouter.js`) ya funciona.
+
+3. **Fetch sin streaming — ARQUITECTURAL (impacto bajo en modo secuencial)**
+   `providers/openrouter.js:27` — `response.text()` bloquea hasta que llega el último token. En modo secuencial, streaming no reduce tiempo total — solo ayudaría si el paralelismo ya estuviera resuelto (UX + P7).
+
+4. **Spawn por run — ARQUITECTURAL (impacto menor, <5% del tiempo total)**
+   `dashboard-service.js:180` — cada click de Run spawna un proceso Node nuevo: parseo de YAML, config, state hydration. Overhead real: ~2-5 s por ciclo. Con 2-3 ciclos para 6 tareas = 10-15 s sobre 360-480 s totales. Un daemon eliminaría esto, pero la ganancia es marginal hasta resolver el loop secuencial.
+
+**Secuencia correcta de cambios**:
+
+- **Paso 1 — Ahora, sin riesgo**: Agregar segunda clave de modelo en `config.json` (ej. `"fast": "<modelo-rapido>"`) y mapear `frontend-html-basic`, `ux`, y skills ligeras a `"fast"`. Dejar planning, backend, y architecture en el modelo actual. Validar en un run real. Tiempo estimado: 15 min.
+
+- **Paso 2 — Prerrequisito para paralelismo**: Separar mutación en memoria de escritura a disco. Cada tarea del batch acumula su resultado en un objeto aislado; un paso serial post-batch aplica todos los resultados a `tasksDoc` y llama `saveTasksWithLock` una sola vez. Esto elimina la race condition sin cambiar la semántica del lock.
+
+- **Paso 3 — Paralelismo real**: Reemplazar el `for...of` con `Promise.all(batch.map(...))` usando el patrón de resultado aislado del Paso 2. La selección de batch ya garantiza que ninguna tarea del batch depende de otra tarea del mismo batch (`getExecutableTasks` solo incluye tareas con todos sus `depends_on` en `done`). El dependency guard agregado en P0 también aplica bajo concurrencia.
+
+- **Paso 4 — Daemon (opcional, bajo ROI)**: Solo después de Paso 1-3. Elimina overhead de spawn pero aporta <5% de mejora total. La motivación real sería mantener `tasksDoc` caliente en memoria entre runs, no la velocidad pura.
+
+**No hacer**: cambiar el loop a `Promise.all` sin antes resolver la race condition de YAML — produciría pérdida silenciosa de estados de tareas bajo carga.
 
 ---
 
