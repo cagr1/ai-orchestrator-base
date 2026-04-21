@@ -24,7 +24,7 @@ const callOpenRouter = async (prompt, config, skill = null, context = {}) => {
   console.log(`[LLM START] run_id=${runId} task_id=${taskId} skill=${skill || 'none'} model_key=${modelKey} model=${model} prompt_len=${promptLen}`);
 
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(providerConfig.base_url || 'https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -35,7 +35,7 @@ const callOpenRouter = async (prompt, config, skill = null, context = {}) => {
       body: JSON.stringify({
         model: model,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2000
+        max_tokens: providerConfig.max_tokens || 8000
       })
     });
 

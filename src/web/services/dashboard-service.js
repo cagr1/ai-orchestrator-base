@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const { execSync, spawn } = require('child_process');
+const { execSync, spawn, spawnSync } = require('child_process');
 const { createMemoryManager } = require('../../integrations/memory-manager');
 const { generateTasks: autoGenerateTasks } = require('../../integrations/auto-planner');
 
@@ -275,14 +275,20 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
     try {
       const next = updateDashboardConfig({ project_root: projectRoot });
       ensureProjectRoot(next.project_root);
-      const output = execSync(`node "${RUNNER}" init "${goal || 'Define project goal here'}" --root "${next.project_root}"`, {
+      const safeGoal = (goal || 'Define project goal here').replace(/\r?\n/g, ' ').trim();
+      const result = spawnSync('node', [RUNNER, 'init', safeGoal, '--root', next.project_root], {
         cwd: next.project_root,
-        timeout: 15000,
+        timeout: 30000,
         encoding: 'utf-8'
       });
-      return { ok: true, output };
+      if (result.status !== 0) {
+        const errMsg = result.stderr || result.stdout || 'runner init exited with non-zero code';
+        console.error('[initProject] runner init failed:', errMsg);
+        return { ok: false, output: errMsg };
+      }
+      return { ok: true, output: result.stdout };
     } catch (e) {
-      return { ok: false, output: e.stdout || e.message };
+      return { ok: false, output: e.message };
     }
   };
 
@@ -386,7 +392,9 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
 
   const refreshSkills = () => {
     try {
-      execSync(`node "${RUNNER}" skills rebuild`, { cwd: rootDir, encoding: 'utf-8' });
+      const activeRoot = getActiveRoot();
+      if (!activeRoot) return { ok: false, error: 'No valid project_root set' };
+      execSync(`node "${RUNNER}" skills rebuild --root "${activeRoot}"`, { cwd: activeRoot, encoding: 'utf-8' });
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.stdout || e.message };
@@ -395,8 +403,10 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
 
   const detectSkills = (apply = false) => {
     try {
-      const cmd = apply ? `node "${RUNNER}" skills install` : `node "${RUNNER}" skills detect`;
-      const output = execSync(cmd, { cwd: rootDir, encoding: 'utf-8' });
+      const activeRoot = getActiveRoot();
+      if (!activeRoot) return { ok: false, output: 'No valid project_root set' };
+      const cmd = apply ? `node "${RUNNER}" skills install --root "${activeRoot}"` : `node "${RUNNER}" skills detect --root "${activeRoot}"`;
+      const output = execSync(cmd, { cwd: activeRoot, encoding: 'utf-8' });
       return { ok: true, output };
     } catch (e) {
       return { ok: false, output: e.stdout || e.message };

@@ -231,6 +231,7 @@ COMPLETED TASKS: ${completed.map(t => t.title || t.id).join(', ') || 'none'}`;
   };
 
   const tasksFile = path.join(systemDir, 'tasks.yaml');
+  fs.mkdirSync(systemDir, { recursive: true });
   fs.writeFileSync(tasksFile, yaml.dump(tasksDoc, { indent: 2 }), 'utf-8');
   console.log(`[PLANNER] persisted_tasks_count=${validTasks.length} file=${tasksFile}`);
 

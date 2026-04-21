@@ -19,8 +19,8 @@ const realtime = createRealtimeHub();
 const websocket = createWebsocketHub(server);
 const dashboard = createDashboardService({ rootDir: ROOT, realtime, websocket });
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
 app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dashboard')));

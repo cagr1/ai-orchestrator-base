@@ -112,16 +112,21 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
   });
 
   router.post('/project/start', async (req, res) => {
-    const { goal, project_root } = req.body || {};
-    const initResult = dashboard.initProject(goal, project_root);
-    if (!initResult.ok) return res.json({ ok: false, stage: 'init', error: initResult.output || initResult });
-    const planResult = await dashboard.generateTasks(goal);
-    if (!planResult.ok) return res.json({ ok: false, stage: 'plan', error: planResult.error || planResult });
-    const tasks = planResult.tasks || [];
-    if (tasks.length === 0) return res.json({ ok: false, stage: 'plan', error: 'no_tasks_planned' });
-    const runResult = dashboard.triggerRun();
-    realtime.broadcast('run:triggered', runResult);
-    res.json({ ok: true, init: initResult, plan: planResult, run: runResult });
+    try {
+      const { goal, project_root } = req.body || {};
+      const initResult = dashboard.initProject(goal, project_root);
+      if (!initResult.ok) return res.json({ ok: false, stage: 'init', error: initResult.output || initResult });
+      const planResult = await dashboard.generateTasks(goal);
+      if (!planResult.ok) return res.json({ ok: false, stage: 'plan', error: planResult.error || planResult });
+      const tasks = planResult.tasks || [];
+      if (tasks.length === 0) return res.json({ ok: false, stage: 'plan', error: 'no_tasks_planned' });
+      const runResult = dashboard.triggerRun();
+      realtime.broadcast('run:triggered', runResult);
+      res.json({ ok: true, init: initResult, plan: planResult, run: runResult });
+    } catch (err) {
+      console.error('[API /project/start] Unhandled error:', err.message, err.stack);
+      res.status(500).json({ ok: false, stage: 'unknown', error: err.message });
+    }
   });
 
   router.post('/prompt', (req, res) => {
