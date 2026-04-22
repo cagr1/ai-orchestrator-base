@@ -907,7 +907,11 @@ const connectRealtime = () => {
           });
           const data = await resp.json();
           if (!data.ok) {
-            showToast('Error creating project: ' + (data.output || data.error || 'unknown'), 'error');
+            if (data.error === 'project_exists') {
+              showToast(`Project already exists (${data.status || 'unknown'}). Use Run/Resume to continue.`, 'error');
+            } else {
+              showToast('Error creating project: ' + (data.output || data.error || 'unknown'), 'error');
+            }
           } else {
             showToast('Project created — runner started!', 'success');
           }
@@ -1178,4 +1182,3 @@ const connectRealtime = () => {
     </script>
   </body>
 </html>
-

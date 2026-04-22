@@ -14,6 +14,7 @@ try {
   require('./phase_sdd_flow.test');
   require('./phase_skill_hygiene.test');
   require('./phase_tasks_lock.test');
+  require('./phase_auto_planner_integration.test');
   
   console.log("\n=== ALL TESTS PASSED ===");
   process.exit(0);

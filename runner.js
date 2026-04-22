@@ -20,9 +20,9 @@ const ACTIVE_ROOT = (() => {
   const args = process.argv.slice(2);
   const rootFlagIndex = args.indexOf('--root');
   if (rootFlagIndex !== -1 && args[rootFlagIndex + 1]) {
-    return args[rootFlagIndex + 1];
+    return path.resolve(args[rootFlagIndex + 1]);
   }
-  return __dirname;
+  return path.resolve(__dirname);
 })();
 
 const ROOT_DIR = ACTIVE_ROOT;

@@ -86,9 +86,11 @@ INSTRUCTIONS:
 - "estado" must always be "pending".
 - "priority": 1 (highest) to 5 (lowest).
 - "depends_on": list IDs of tasks that must finish first.
+- "input": list output file paths from dependency tasks that this task must read before writing its own output. If a task depends on another task, include the relevant dependency output paths here.
 - Each task "output" must list at most 2 specific file paths (no directory wildcards like /src or /public). Split large project scaffolds across multiple tasks so each task writes 1–2 files.
 - If any task uses skill "frontend-html-basic", make T1 a minimal bootstrap task that outputs ONLY "index.html". Move CSS/JS files to later tasks (T2+).
 - For that same frontend-html-basic flow, make T2 output ONLY "docs/wireframe.md" and keep it concise (short wireframe summary, not a full design system spec).
+- For frontend-html-basic projects with separate CSS or JS outputs, create a final integration task that outputs "index.html", depends on the CSS/JS tasks, and lists "index.html" plus those CSS/JS files in "input". This final task must link the generated assets from the HTML.
 
 REQUIRED YAML SCHEMA:
 \`\`\`yaml
@@ -138,6 +140,59 @@ const enforceFrontendT2Sizing = (tasks = []) => {
 
   t2.output = ['docs/wireframe.md'];
   t2.description = 'Write a concise landing-page wireframe summary in Markdown (max 120 lines): sections, content hierarchy, and brief component notes. Do not include full style guide, exhaustive copy, or long design-system documentation.';
+};
+
+const unique = (values = []) => [...new Set(values.filter(Boolean))];
+
+const ensureListIncludes = (task, field, values) => {
+  task[field] = unique([...(Array.isArray(task[field]) ? task[field] : []), ...values]);
+};
+
+const isFrontendAssetPath = (filePath = '') => /\.(css|js)$/i.test(filePath);
+
+const taskOutputs = (task) => Array.isArray(task?.output) ? task.output.filter(Boolean) : [];
+
+const enforceFrontendIntegrationInputs = (tasks = []) => {
+  const t1 = tasks.find(task => task && task.id === 'T1');
+  if (!t1 || t1.skill !== 'frontend-html-basic') return;
+
+  const htmlPath = 'index.html';
+  const assetTasks = tasks.filter(task => taskOutputs(task).some(isFrontendAssetPath));
+  if (assetTasks.length === 0) return;
+
+  for (const task of assetTasks) {
+    if (task.id !== 'T1') {
+      ensureListIncludes(task, 'depends_on', ['T1']);
+    }
+    ensureListIncludes(task, 'input', [htmlPath]);
+  }
+
+  const assetTaskIds = assetTasks.map(task => task.id).filter(Boolean);
+  const assetOutputs = unique(assetTasks.flatMap(taskOutputs).filter(isFrontendAssetPath));
+  let integrationTask = tasks.find(task => task.id !== 'T1' && taskOutputs(task).includes(htmlPath));
+
+  if (!integrationTask) {
+    const maxNumericId = tasks.reduce((max, task) => {
+      const match = String(task?.id || '').match(/^T(\d+)$/);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    integrationTask = {
+      id: `T${maxNumericId + 1}`,
+      title: 'Integrate generated frontend assets',
+      description: 'Update index.html to link the generated CSS and JavaScript files. Preserve the existing HTML structure and only add the required stylesheet and script references.',
+      skill: 'frontend-html-basic',
+      estado: 'pending',
+      priority: Math.min(5, Math.max(1, ...assetTasks.map(task => Number(task.priority) || 1)) + 1),
+      depends_on: [],
+      input: [],
+      output: [htmlPath]
+    };
+    tasks.push(integrationTask);
+  }
+
+  ensureListIncludes(integrationTask, 'depends_on', assetTaskIds);
+  ensureListIncludes(integrationTask, 'input', [htmlPath, ...assetOutputs]);
+  integrationTask.output = [htmlPath];
 };
 
 const generateTasks = async ({ goal, systemDir, config, state }) => {
@@ -220,6 +275,7 @@ COMPLETED TASKS: ${completed.map(t => t.title || t.id).join(', ') || 'none'}`;
 
   enforceFrontendBootstrap(validTasks);
   enforceFrontendT2Sizing(validTasks);
+  enforceFrontendIntegrationInputs(validTasks);
   tasksDoc.tasks = validTasks;
   tasksDoc.metadata = {
     ...(tasksDoc.metadata || {}),
@@ -243,4 +299,4 @@ COMPLETED TASKS: ${completed.map(t => t.title || t.id).join(', ') || 'none'}`;
   };
 };
 
-module.exports = { generateTasks };
+module.exports = { generateTasks, enforceFrontendIntegrationInputs };

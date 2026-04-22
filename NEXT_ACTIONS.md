@@ -8,7 +8,7 @@ updated: 2026-04-22
 ## Status: Loop Closed — Quality & Integrity Phase
 
 Loop confirmed cerrado dos veces: demo2 (2026-04-21) y demo3 (2026-04-22, minimax-m2.7).
-Falla activa visible: los archivos de output no se enlazan entre sí (index.html no incluye styles.css ni script.js).
+PINTEGRATION tiene patch aplicado y unit test; falta clean rerun real para aceptar la corrección como cerrada.
 
 ---
 
@@ -29,27 +29,27 @@ Sin validación en run real, el fix es hipótesis — no solución. Esto aplica 
 
 ---
 
-### PGUARD — CRÍTICO: Create Project sobrescribe proyecto existente sin avisar
-**Síntoma**: Al presionar "Create Project" sobre una ruta que ya tiene `system/state.json` y `system/tasks.yaml`, el sistema re-genera el plan desde cero, borra todo el progreso previo, y reinicia `state.json` sin advertencia.
-**Causa**: `api.js:114` → `initProject` → `generateTasks` — ninguno de los tres verifica si ya existe un proyecto en `project_root`. `tasks.yaml` se sobreescribe incondicionalmente.
-**Dónde arreglar**: `dashboard-service.js:285` (inicio de `initProject`) — verificar si `system/state.json` o `system/tasks.yaml` existen en el root antes de continuar. Si existen y `state.status !== 'completed'`, retornar `{ok: false, error: 'project_exists', status}` y dejar que la UI ofrezca Resume en su lugar.
-**Por qué aquí y no en api.js**: protege contra llamadas directas que bypaseen la ruta HTTP.
-**Riesgo si no se resuelve**: pérdida de datos de usuario en cada click accidental.
+### PINTEGRATION — PATCH APLICADO, PENDIENTE RUN REAL: Archivos de output no se enlazan entre sí
+**Síntoma confirmado 2026-04-22**: `demo3/index.html` no contiene `<link rel="stylesheet" href="styles.css">` ni `<script src="script.js">`. Los archivos existen pero el HTML no los referencia.
 
----
+**Causa raíz verificada**:
+- `src/integrations/auto-planner.js:89` antes no explicaba que `input` debe listar outputs de dependencias; el planner podía generar `input: []` para tareas que necesitaban leer `index.html`, `styles.css` o `script.js`.
+- `runner.js:662` sí lee `task.input`; el problema era que el planner no producía esos inputs.
+- `runner.js:666` resuelve inputs con `ROOT_DIR`; ahora `runner.js:23` y `runner.js:25` normalizan `--root`/fallback con `path.resolve`, por lo que el comportamiento esperado es resolver inputs contra el project root efectivo mostrado por `[RUNNER START]`.
 
-### PINTEGRATION — CRÍTICO: Archivos de output no se enlazan entre sí
-**Síntoma confirmado 2026-04-22**: `demo3/index.html` no contiene `<link rel="stylesheet" href="styles.css">` ni `<script src="script.js">`. Los archivos existen pero el HTML no los referencia. El sitio no funciona en browser.
-**Causa raíz**: La falla está en el **planner prompt** (`auto-planner.js:buildPrompt`), no en el runner.
-- El prompt de ejemplo muestra `"input": []` sin explicar que `input` debe listar los outputs de tareas anteriores que esta tarea debe leer e integrar.
-- El LLM genera tareas con `input: []` vacío — el ejecutor de `styles.css` nunca recibe `index.html` como contexto, y el ejecutor de `index.html` nunca sabe qué archivos CSS/JS va a necesitar enlazar.
-- `buildExecutionPrompt` en `runner.js:662-674` **sí inyecta** el contenido de `task.input` correctamente — pero si el array está vacío, no hay nada que inyectar.
+**Patch aplicado con comportamiento esperado**:
+- `src/integrations/auto-planner.js:89` — el prompt exige que `input` liste outputs relevantes de tareas dependientes.
+- `src/integrations/auto-planner.js:93` — el prompt exige una tarea final de integración cuando CSS/JS se generan aparte; esa tarea debe outputear `index.html` y leer `index.html` + assets.
+- `src/integrations/auto-planner.js:155` — `enforceFrontendIntegrationInputs(tasks)` fuerza `styles.css`/`script.js` tasks a depender de `T1` y leer `index.html`; si falta una tarea final HTML, crea una nueva que depende de los assets y outputea `index.html`.
+- `src/integrations/auto-planner.js:278` — el enforcement corre antes de persistir `tasks.yaml`; el comportamiento esperado es que el YAML guardado ya tenga cross-references aunque el LLM los omita.
+- `tests/phase_auto_planner_integration.test.js:53` — valida que CSS/JS reciban `input: ["index.html"]` y que se cree una tarea final `index.html` con inputs de assets.
 
-**Segunda falla (runner.js:667)**: `buildExecutionPrompt` resuelve paths de input con `path.join(ROOT_DIR, inputPath)`. Si `ROOT_DIR` apunta al directorio del orquestador en lugar del proyecto activo, el `fs.existsSync` devuelve false y la inyección silenciosamente no ocurre, incluso con `input` correctamente declarado.
+**Validación ejecutada**:
+- `node tests/phase_auto_planner_integration.test.js` → passed.
+- `npm test` → all tests passed.
 
-**Fix requerido (dos partes)**:
-1. **auto-planner.js:buildPrompt** — agregar instrucción explícita: `input` debe listar los archivos de output de las tareas previas de las que esta tarea depende. Agregar un enforcement pass análogo a `enforceFrontendBootstrap` que verifique que `T_css.input` incluye el HTML y `T_html.input` incluye los nombres de CSS/JS que se van a crear.
-2. **runner.js:667** — verificar que el path base para resolver `input` sea el project root (`ROOT_DIR` cuando se pasa `--root`) y no el directorio del orquestador.
+**Validación pendiente antes de marcar cerrado**:
+- Ejecutar `P2-INTEGRATION-VALIDATE` desde proyecto limpio y confirmar que `tasks.yaml` tiene la tarea final de integración y que `demo3/index.html` carga CSS/JS con 200 en browser.
 
 ---
 
@@ -152,6 +152,19 @@ Sin validación en run real, el fix es hipótesis — no solución. Esto aplica 
 ---
 
 ## Resuelto — Referencia
+
+### PGUARD — RESUELTO: Create Project no sobrescribe proyectos activos
+**Fecha**: 2026-04-22
+
+**Cambios con comportamiento esperado**:
+- `src/web/services/dashboard-service.js:285` — `getExistingProjectGuard(projectRoot)` revisa `system/state.json` y `system/tasks.yaml`; si existe cualquiera y `state.status !== "completed"`, debe devolver `{ ok: false, error: "project_exists", status }` sin escribir `tasks.yaml`.
+- `src/web/services/dashboard-service.js:305` — `initProject(goal, projectRoot)` actualiza el dashboard root seleccionado, valida el guard antes de `runner init`, y solo permite re-inicializar cuando no hay proyecto previo o el estado es `completed`.
+- `src/web/routes/api.js:119` — `POST /api/v1/project/start` preserva `error`, `status` y `output` del fallo de init; no debe convertir `project_exists` en un string genérico ni continuar hacia `generateTasks`.
+- `src/web/public/dashboard/index.html:910` — el botón Create Project muestra un toast específico para `project_exists`: el comportamiento esperado es orientar al usuario a Run/Resume sin intentar crear un plan nuevo.
+
+**Validación ejecutada**:
+- Reproducción directa con proyecto temporal: `state.status = "paused"` + `tasks.yaml` existente → `initProject` retorna `project_exists` y `tasks.yaml` queda sin cambios.
+- `npm test` → all tests passed.
 
 | Item | Fecha | Notas |
 |------|-------|-------|

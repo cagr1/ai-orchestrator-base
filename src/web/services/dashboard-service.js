@@ -282,10 +282,33 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
     }
   };
 
+  const getExistingProjectGuard = (projectRoot) => {
+    const systemDir = path.join(projectRoot, 'system');
+    const stateFile = path.join(systemDir, 'state.json');
+    const tasksFile = path.join(systemDir, 'tasks.yaml');
+    const hasState = fs.existsSync(stateFile);
+    const hasTasks = fs.existsSync(tasksFile);
+    if (!hasState && !hasTasks) return null;
+
+    const state = hasState ? readJSON(stateFile) : null;
+    const status = state?.status || 'unknown';
+    if (status === 'completed') return null;
+
+    return {
+      ok: false,
+      error: 'project_exists',
+      status,
+      output: `Project already exists at ${projectRoot} with status "${status}". Use Resume instead of Create Project.`
+    };
+  };
+
   const initProject = (goal, projectRoot) => {
     if (!projectRoot) return { ok: false, output: 'project_root is required' };
     try {
       const next = updateDashboardConfig({ project_root: projectRoot });
+      if (next.error) return { ok: false, error: 'invalid_project_root', output: next.error };
+      const existingProject = getExistingProjectGuard(next.project_root);
+      if (existingProject) return existingProject;
       ensureProjectRoot(next.project_root);
       const safeGoal = (goal || 'Define project goal here').replace(/\r?\n/g, ' ').trim();
       const result = spawnSync('node', [RUNNER, 'init', safeGoal, '--root', next.project_root], {

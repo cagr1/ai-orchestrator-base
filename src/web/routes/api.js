@@ -115,7 +115,14 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
     try {
       const { goal, project_root } = req.body || {};
       const initResult = dashboard.initProject(goal, project_root);
-      if (!initResult.ok) return res.json({ ok: false, stage: 'init', error: initResult.output || initResult });
+      if (!initResult.ok) {
+        return res.json({
+          ok: false,
+          stage: 'init',
+          ...initResult,
+          error: initResult.error || initResult.output || 'init_failed'
+        });
+      }
       const planResult = await dashboard.generateTasks(goal);
       if (!planResult.ok) return res.json({ ok: false, stage: 'plan', error: planResult.error || planResult });
       const tasks = planResult.tasks || [];
