@@ -1928,7 +1928,7 @@ const main = async () => {
       applyRetentionPolicies();
 
       if (command === 'run' && state.status === 'paused') {
-        console.error('[HALT] State is paused. Run: node runner.js resume');
+        console.error(`[HALT] State is paused. Run: node runner.js resume --root "${ROOT_DIR}"`);
         state.halt_reason = 'paused_requires_resume';
         return;
       }

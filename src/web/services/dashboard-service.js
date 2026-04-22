@@ -213,6 +213,18 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
         }
         broadcast('terminal:closed', { code });
         broadcast('snapshot:updated', getSnapshot());
+
+        // Auto-loop: if runner exited cleanly and state is still paused, resume automatically.
+        if (code === 0) {
+          try {
+            const { stateFile } = getPaths();
+            const latestState = readJSON(stateFile) || {};
+            if (latestState.status === 'paused') {
+              broadcast('terminal:output', { type: 'info', data: '[AUTO-RESUME] Batch cap reached — continuing automatically...\n' });
+              triggerRun('resume');
+            }
+          } catch (_e) { /* ignore — auto-loop is best-effort */ }
+        }
       });
 
       child.on('error', (err) => {

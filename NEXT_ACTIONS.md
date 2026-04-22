@@ -1,165 +1,174 @@
 ---
 type: next-actions
-updated: 2026-04-21
+updated: 2026-04-22
 ---
 
 # NEXT_ACTIONS.md
 
-## Status: Loop Closed — Entering Quality Phase
+## Status: Loop Closed — Quality & Integrity Phase
 
-First clean closure confirmed 2026-04-21. Active blocker is now output integration quality.
-
----
-
-## Priority Queue
-
-### P0 — CRÍTICO: Dependency integrity — task avanza aunque su dependencia falló
-**Síntoma**: T1 falló en una iteración pero T2 corrió igualmente. Si T1 no está `done`, ninguna tarea con `depends_on: [T1]` debería ejecutarse.
-**Causa probable**: El planner no declaró `depends_on` en T2, O el estado quedó inconsistente entre runs (T1 marcado `done` en un run, luego `failed` en otro sin resetear dependientes).
-**Dónde buscar**: `recalculateTaskStates` en runner.js — verificar que la condición de desbloqueo exige `estado === 'done'`, no solo ausencia de `failed`.
-**Riesgo si no se resuelve**: El sistema ejecuta tareas con dependencias rotas → output integrado inconsistente, archivos que asumen contexto que no existe.
-**Fix requerido**: Trazar con un run controlado. Leer `demo3/system/tasks.yaml` después del fallo para verificar qué `estado` tenía T1 cuando T2 se ejecutó.
+Loop confirmed cerrado dos veces: demo2 (2026-04-21) y demo3 (2026-04-22, minimax-m2.7).
+Falla activa visible: los archivos de output no se enlazan entre sí (index.html no incluye styles.css ni script.js).
 
 ---
 
-### P1 — CRÍTICO: T3 truncation persiste aunque compact retry se activa
-**Síntoma**: `kimi-k2.6` genera CSS de ~3987 chars, se corta en posición 3962 (JSON unterminated). El retry se activa (`attempt 1/3`) pero el run termina antes de que complete.
-**Causa raíz**: El runner respeta `max_tasks_per_run` y cierra la iteración después del checkpoint, incluso si hay un retry pendiente. El retry se guarda en estado (`truncation_retry: true`) pero el siguiente run no lo recoge si el estado no persiste correctamente.
-**Fix requerido**:
-1. Verificar que `truncation_retry: true` persiste en `tasks.yaml` entre runs.
-2. Verificar que al inicio del siguiente run, las tareas con `truncation_retry: true` se seleccionan en el batch con prioridad.
-3. Alternativa: aumentar `max_tokens` en `config.json` para tareas CSS (skill `frontend-html-basic` → modelo con más tokens).
+## Filosofía de trabajo (2026-04-22)
+
+**Test antes de arreglar bugs. No repetir errores.**
+
+Antes de aplicar cualquier fix:
+1. Reproducir el bug en un run controlado y observar el síntoma exacto en logs/YAML
+2. Aplicar el fix mínimo
+3. Confirmar en un run real que el log/síntoma esperado desaparece
+
+Sin validación en run real, el fix es hipótesis — no solución. Esto aplica especialmente a P0 y P1 que están aplicados pero sin confirmar.
 
 ---
 
-### P2 — Validate demo3 hospital site runs end-to-end (clean rerun)
-**What**: Three fixes applied to `/project/start` flow. All blocked by shell command injection of multi-line goals. Now validate.
-
-**Fixes applied**:
-- `initProject` → `spawnSync` with args array (no shell interpolation, handles any chars)
-- `runner.js init` args parsing → filters `--root` AND its value (goal no longer contaminated)
-- `express.json` limit → 1mb (supports long prompts)
-- `auto-planner.js` → `mkdirSync` before writeFileSync
-
-**Procedure**:
-1. Wipe `C:\Users\Windows\Documents\demo3`
-2. Restart dashboard (`npm run dashboard`)
-3. Submit hospital Machala goal (multi-line, with URL) via dashboard
-4. Confirm terminal shows `[INIT]` messages + planner generates tasks
-5. Confirm run reaches `all_tasks_completed`
-6. Open `demo3/index.html` in browser — styles and scripts should load (integration fix validation)
-
-**Done when**: demo3 completes from clean state, all files integrate correctly in browser.
+## Priority Queue — Estado actual (2026-04-22)
 
 ---
 
-### P2 — Configure model-per-skill (Codex for code, minimax for drafts)
-**What**: `system/config.json → model_mapping` currently routes all skills to one model. Map frontend/backend skills to Codex, lightweight tasks to minimax.
-
-**File**: `system/config.json` in orchestrator root.  
-**Do not change**: runner.js — the mapping mechanism already exists.
-
----
-
-### P3 — Add Resume button to dashboard UI
-**What**: When `state.json → status = paused`, dashboard shows no Resume button. User must run CLI manually.
-
-**File**: `src/web/` — identify the dashboard component that renders run controls.  
-**Fix**: Add button that calls `triggerResume()` on the service when status is paused.
+### PGUARD — CRÍTICO: Create Project sobrescribe proyecto existente sin avisar
+**Síntoma**: Al presionar "Create Project" sobre una ruta que ya tiene `system/state.json` y `system/tasks.yaml`, el sistema re-genera el plan desde cero, borra todo el progreso previo, y reinicia `state.json` sin advertencia.
+**Causa**: `api.js:114` → `initProject` → `generateTasks` — ninguno de los tres verifica si ya existe un proyecto en `project_root`. `tasks.yaml` se sobreescribe incondicionalmente.
+**Dónde arreglar**: `dashboard-service.js:285` (inicio de `initProject`) — verificar si `system/state.json` o `system/tasks.yaml` existen en el root antes de continuar. Si existen y `state.status !== 'completed'`, retornar `{ok: false, error: 'project_exists', status}` y dejar que la UI ofrezca Resume en su lugar.
+**Por qué aquí y no en api.js**: protege contra llamadas directas que bypaseen la ruta HTTP.
+**Riesgo si no se resuelve**: pérdida de datos de usuario en cada click accidental.
 
 ---
 
-### P4 — Integrate Engram for cross-run planner memory
-**Repo**: https://github.com/Gentleman-Programming/engram  
-**Purpose**: Let the planner remember architectural decisions from prior runs.  
-**Prerequisite**: P1 and P2 must be stable first. Do not introduce Engram while core loop is still being hardened.
+### PINTEGRATION — CRÍTICO: Archivos de output no se enlazan entre sí
+**Síntoma confirmado 2026-04-22**: `demo3/index.html` no contiene `<link rel="stylesheet" href="styles.css">` ni `<script src="script.js">`. Los archivos existen pero el HTML no los referencia. El sitio no funciona en browser.
+**Causa raíz**: La falla está en el **planner prompt** (`auto-planner.js:buildPrompt`), no en el runner.
+- El prompt de ejemplo muestra `"input": []` sin explicar que `input` debe listar los outputs de tareas anteriores que esta tarea debe leer e integrar.
+- El LLM genera tareas con `input: []` vacío — el ejecutor de `styles.css` nunca recibe `index.html` como contexto, y el ejecutor de `index.html` nunca sabe qué archivos CSS/JS va a necesitar enlazar.
+- `buildExecutionPrompt` en `runner.js:662-674` **sí inyecta** el contenido de `task.input` correctamente — pero si el array está vacío, no hay nada que inyectar.
+
+**Segunda falla (runner.js:667)**: `buildExecutionPrompt` resuelve paths de input con `path.join(ROOT_DIR, inputPath)`. Si `ROOT_DIR` apunta al directorio del orquestador en lugar del proyecto activo, el `fs.existsSync` devuelve false y la inyección silenciosamente no ocurre, incluso con `input` correctamente declarado.
+
+**Fix requerido (dos partes)**:
+1. **auto-planner.js:buildPrompt** — agregar instrucción explícita: `input` debe listar los archivos de output de las tareas previas de las que esta tarea depende. Agregar un enforcement pass análogo a `enforceFrontendBootstrap` que verifique que `T_css.input` incluye el HTML y `T_html.input` incluye los nombres de CSS/JS que se van a crear.
+2. **runner.js:667** — verificar que el path base para resolver `input` sea el project root (`ROOT_DIR` cuando se pasa `--root`) y no el directorio del orquestador.
 
 ---
 
-### P5 — Codex integration as production executor
-**What**: Wire Codex as the LLM for `skill: frontend-*` and `skill: backend-*` tasks.  
-**Why**: minimax-m2.7 generates verbose output that triggers truncation retries. Codex produces tighter, more structured code.  
-**Prerequisite**: P2 (model mapping).
+### P0 — APLICADO, SIN VALIDAR: Dependency guard en runtime
+**Patch aplicado**: `runner.js:2081-2099` (dep guard) + `runner.js:2414` (truncation break batch)
+**Estado**: código correcto según code review del arch-reviewer, pero **nunca ha disparado en un run real**.
+**Edge case conocido**: `failed_permanent` no está en `liveFailedIds` — se bloquea igual por `depNotDone` pero el log dice `dependency_not_done` en lugar de `dependency_failed`. Cosmético, no funcional.
+**Validación requerida**: Forzar que T1 falle en un run (manualmente marcar `estado: failed` en `tasks.yaml` mientras corre, o crear un task con output inválido). Confirmar en logs: `[DEPS GUARD] Blocking T2 — dependency T1 is failed`. Confirmar en `tasks.yaml`: T2 queda `blocked` con `block_reason: dependency_failed:T1`.
+**No marcar como done hasta ver esa línea en un run real.**
 
 ---
+
+### P1 — APLICADO, SIN VALIDAR: Truncation break + retry pickup
+**Patch aplicado**: truncation ahora hace `break` en lugar de continuar el loop (`runner.js:2414`)
+**Estado**: correcto estructuralmente. El `truncation_retry: true` persiste en `tasks.yaml` y el siguiente run lo recoge vía `getExecutableTasks` (el task queda `pending`).
+**Incógnita**: el truncation original ocurrió con `kimi-k2.6` a ~3987 chars. Con `minimax-m2.7` activo ahora, puede que no se alcance ese threshold — el bug podría estar dormido.
+**Validación requerida**: correr un task con output CSS largo y confirmar si minimax también trunca. Si no trunca, el patch es preventivo y correcto. Si sí trunca, confirmar que el retry se recoge en el siguiente run con `truncation_retry: true` visible en `tasks.yaml`.
+
+---
+
+### P8.1 — CRÍTICO: Silent state loss en conflicto de hash YAML
+**Líneas**: `runner.js:2431-2440`
+**Síntoma**: `saveTasksWithLock` retorna `{ok: false, reason: 'tasks_yaml_conflict'}` y el runner trata esto como `[WARN]` y continúa. Todas las transiciones de estado del batch (`done`, `failed`, `blocked`, `truncation_retry`) se descartan silenciosamente. El runner termina con `[END] Runner finished` limpio, pero `tasks.yaml` no fue actualizado.
+**Consecuencia**: runs subsiguientes re-ejecutan tareas ya completadas, `cost.json` incrementa sin progreso real, outputs correctos se sobreescriben.
+**Relación con "Do Not Touch"**: `tasks_yaml_conflict` estaba sin diagnóstico — este es el vector de daño exacto. El `{ok: false}` es detección sin recovery.
+**Fix requerido**: convertir el warn en halt con `hardFailure` — si el YAML no se pudo guardar, el run no fue exitoso y el estado no debe marcarse como completado.
+
+---
+
+### P2-INTEGRATION-VALIDATE — Validar demo3 end-to-end con fix de planner
+**Bloquea a**: confirmar que `PINTEGRATION` fix funciona.
+**Procedure post-fix**:
+1. Aplicar fix de planner prompt (PINTEGRATION)
+2. Wipear `C:\Users\Windows\Documents\demo3`
+3. Restart dashboard
+4. Submit goal → confirmar tasks.yaml tiene `input` con cross-references entre tareas
+5. Dejar correr hasta `all_tasks_completed`
+6. Abrir `demo3/index.html` en browser — verificar que `styles.css` y `script.js` cargan y no hay 404 en DevTools
+**Done when**: network tab en browser muestra 200 para todos los recursos enlazados desde `index.html`.
+
+---
+
+### P2-MODEL — Configurar model-per-skill
+**Estado**: no aplicado. Todas las skills rutean a `"base"` → `minimax/minimax-m2.7`.
+**Fix**: `system/config.json` — agregar clave `"fast": "<modelo-rapido>"` y mapear `frontend-html-basic`, `ux`, y skills ligeras a `"fast"`. Dejar `planner`, `backend`, `architecture` en el modelo actual. Cero código, cero riesgo.
+**Prerequisito**: PINTEGRATION debe estar validado primero — cambiar modelo y prompt al mismo tiempo hace imposible aislar cuál arregló el problema.
+
+---
+
+### P8.3 — `failed_permanent` puede re-entrar al pool ejecutable
+**Líneas**: `runner.js:1720-1742` (`recalculateTaskStates`)
+**Riesgo**: el guard protege `done`, `failed`, `split_required` pero no `failed_permanent`. Una tarea `failed_permanent` con deps incompletas se sobreescribe a `blocked`. Cuando esas deps completan en un run posterior, la tarea sube de `blocked` → `pending` y re-entra al batch, bypassando el mecanismo de exhaustion.
+**Fix**: agregar `'failed_permanent'` al guard en línea 1727.
+
+---
+
+### P8.2 — Auto-complete bypass de R10 para `output: []`
+**Líneas**: `runner.js:2262-2279`
+**Riesgo**: tasks con `output: []` generan un archivo markdown sintético, fabrican evidencia, y se marcan `done` descartando la respuesta del LLM. Cualquier task sin `output` declarado (error del planner) siempre auto-completa.
+**Fix**: el branch auto-complete debe requerir que el LLM haya producido alguna respuesta verificable, no solo existir el campo vacío.
 
 ---
 
 ### P3 — UI: Kanban no muestra estado "running" durante ejecución
-**Síntoma**: Tarea pasa de `pending` directo a `done` o `failed` sin mostrar `in_progress`. No hay señal visual de que algo está corriendo.
-**Causa**: El runner marca la tarea `in_progress` brevemente antes de completar, pero el dashboard solo recibe snapshot updates cada N segundos — nunca captura el estado intermedio.
-**Fix requerido**: Emitir un evento SSE explícito `task:running` cuando el runner empieza a ejecutar una tarea (antes de la LLM call), y que el kanban lo refleje sin esperar el snapshot completo.
+**Síntoma**: Tarea pasa de `pending` directo a `done` o `failed` sin mostrar estado intermedio.
+**Fix requerido**: Emitir evento SSE explícito `task:running` antes de la LLM call, y que el kanban lo refleje sin esperar el snapshot completo.
 
 ---
 
-### P4 — UI: No hay botón Resume cuando el runner está pausado
-**Síntoma**: Cuando `state.json → status = paused`, el dashboard no muestra botón de resume. Usuario debe usar CLI.
-**Fix**: En `src/web/public/dashboard/index.html`, mostrar el botón "Resume" condicionalmente cuando el estado es `paused`. El endpoint ya existe: `POST /api/v1/resume`.
+### P5 — UX: Mensaje manual aparece en modo AUTO
+**Síntoma**: El runner imprime `[NEXT] Ejecuta las tareas del batch...` incluso en ejecución automática.
+**Fix**: Suprimir ese bloque cuando `AUTO_EXECUTE = true`.
 
 ---
 
-### P5 — UX: Mensaje `[NEXT] Ejecuta las tareas del batch` aparece en modo AUTO
-**Síntoma**: El runner imprime instrucciones manuales ("Marca cada tarea como done en tasks.yaml...") incluso en ejecución automática. Confunde al usuario — parece que el sistema espera intervención manual.
-**Fix**: Suprimir o reemplazar ese bloque de texto cuando el runner está en modo AUTO_EXECUTE. Solo mostrarlo en modo manual.
+### P6 — VELOCIDAD: Loop secuencial + spawn overhead + modelo único
+*(Ver diagnóstico completo en versión anterior — se mantiene intacto)*
+
+**Resumen**: El loop `for...of` con `await` en `runner.js:2078` es secuencial aunque el banner dice "PARALELO". El bloqueador para paralelismo real es la race condition en `tasks.yaml` (P8.1 debe resolverse primero). El cambio de mayor leverage inmediato sin riesgo es model-per-skill (P2-MODEL).
+
+**Secuencia correcta**:
+1. P8.1 (silent state loss) → prerequisito para paralelismo seguro
+2. P2-MODEL (config, cero riesgo)
+3. Isolated-result pattern (fix de race condition)
+4. `Promise.all` parallelism
+5. Daemon (bajo ROI, opcional)
 
 ---
 
-### P6 — VELOCIDAD: Cada iteración = proceso nuevo + LLM secuencial + sin streaming
-**Síntoma**: 6-8 minutos para 6 tareas simples. Realtime feed muestra gaps de 4-7 minutos entre snapshots.
-
-**Diagnóstico arquitectónico** (revisión 2026-04-21):
-
-El banner `🟢 BATCH PARALELO` que imprime el runner es un nombre falso — el loop en `runner.js:2078` es un `for...of` con `await` secuencial. El nombre del campo `parallel_batch` en `state.json` no corresponde a ninguna ejecución paralela real. Este mismatch hace el problema invisible en los logs.
-
-**Causas rankeadas por impacto real**:
-
-1. **Loop secuencial dentro del batch — ARQUITECTURAL (impacto dominante)**
-   `runner.js:2078` — cada tarea espera a que la anterior termine. Con `max_batch_size=3` y 60-90 s por LLM call, 3 tareas cuestan 180-270 s en secuencia, vs ~90 s en paralelo. Este es el cuello de botella principal.
-   **Bloqueador para resolverlo**: race condition en escritura de `tasks.yaml`. Bajo `Promise.all` real, dos tareas compartirían el mismo `tasksDoc` en memoria, lo mutarían concurrentemente, y el segundo `saveTasksWithLock` perdería los cambios del primero silenciosamente (last-writer-wins con hash check).
-
-2. **Un solo modelo para todas las skills — CONFIGURACIÓN (impacto alto, riesgo cero)**
-   `system/config.json` → `model_mapping` enruta todas las skills a `"base"` → mismo modelo lento para planning y para un HTML simple. Cambiar skills de baja complejidad (`frontend-html-basic`, `ux`) a un modelo más rápido reduce latencia por task sin tocar código. La infraestructura (`model_mapping` en `openrouter.js`) ya funciona.
-
-3. **Fetch sin streaming — ARQUITECTURAL (impacto bajo en modo secuencial)**
-   `providers/openrouter.js:27` — `response.text()` bloquea hasta que llega el último token. En modo secuencial, streaming no reduce tiempo total — solo ayudaría si el paralelismo ya estuviera resuelto (UX + P7).
-
-4. **Spawn por run — ARQUITECTURAL (impacto menor, <5% del tiempo total)**
-   `dashboard-service.js:180` — cada click de Run spawna un proceso Node nuevo: parseo de YAML, config, state hydration. Overhead real: ~2-5 s por ciclo. Con 2-3 ciclos para 6 tareas = 10-15 s sobre 360-480 s totales. Un daemon eliminaría esto, pero la ganancia es marginal hasta resolver el loop secuencial.
-
-**Secuencia correcta de cambios**:
-
-- **Paso 1 — Ahora, sin riesgo**: Agregar segunda clave de modelo en `config.json` (ej. `"fast": "<modelo-rapido>"`) y mapear `frontend-html-basic`, `ux`, y skills ligeras a `"fast"`. Dejar planning, backend, y architecture en el modelo actual. Validar en un run real. Tiempo estimado: 15 min.
-
-- **Paso 2 — Prerrequisito para paralelismo**: Separar mutación en memoria de escritura a disco. Cada tarea del batch acumula su resultado en un objeto aislado; un paso serial post-batch aplica todos los resultados a `tasksDoc` y llama `saveTasksWithLock` una sola vez. Esto elimina la race condition sin cambiar la semántica del lock.
-
-- **Paso 3 — Paralelismo real**: Reemplazar el `for...of` con `Promise.all(batch.map(...))` usando el patrón de resultado aislado del Paso 2. La selección de batch ya garantiza que ninguna tarea del batch depende de otra tarea del mismo batch (`getExecutableTasks` solo incluye tareas con todos sus `depends_on` en `done`). El dependency guard agregado en P0 también aplica bajo concurrencia.
-
-- **Paso 4 — Daemon (opcional, bajo ROI)**: Solo después de Paso 1-3. Elimina overhead de spawn pero aporta <5% de mejora total. La motivación real sería mantener `tasksDoc` caliente en memoria entre runs, no la velocidad pura.
-
-**No hacer**: cambiar el loop a `Promise.all` sin antes resolver la race condition de YAML — produciría pérdida silenciosa de estados de tareas bajo carga.
+### P7 — UI: Terminal sin señal de actividad durante LLM call
+**Síntoma**: botón RUN no cambia de estado, usuario no sabe si el sistema está trabajando o colgado.
+**Fix**: spinner en botón + indicador mientras se espera respuesta LLM.
 
 ---
 
-### P7 — UI: Terminal output parcial / señales de actividad insuficientes
-**Síntoma**: El usuario no sabe si el sistema está trabajando o colgado. El botón RUN no cambia de estado cuando hay un run activo.
-**Fix**:
-1. Botón RUN → mostrar spinner y texto "Ejecutando..." mientras hay un runner activo
-2. Agregar "typing indicator" o barra de progreso cuando se está esperando respuesta LLM
-**Referencia**: `v8-OrchestOS-fixplan.md` sección 9 — terminal siempre visible, panel inferior fijo.
+### P9 — Realtime feed no informativo
+**Síntoma**: solo muestra "snapshot updated". No indica tarea, modelo, archivos cambiados.
+**Fix**: enriquecer eventos SSE con `task_id`, `skill`, `model`, `files_changed`.
 
 ---
 
-### P8 — Realtime feed no informativo
-**Síntoma**: Solo muestra "snapshot updated" con timestamp. No indica qué tarea corrió, qué modelo usó, qué archivos cambió.
-**Fix**: Enriquecer los eventos SSE con payload de tarea (`task_id`, `skill`, `model`, `files_changed`). El feed debe leer como log de actividad, no como ping de heartbeat.
+## Resuelto — Referencia
+
+| Item | Fecha | Notas |
+|------|-------|-------|
+| P4 Auto-loop + Resume | 2026-04-22 | `dashboard-service.js:217` — auto-resume cuando `status=paused`, exit code 0. Run button rutea a `/resume` cuando estado es paused. CLI message incluye `--root`. |
+| Input injection en prompts | 2026-04-21 | `runner.js:buildExecutionPrompt` — inyecta contenido de `task.input` como contexto |
+| POST /project/start 500 | 2026-04-21 | try/catch en api.js |
+| ENOENT en generateTasks | 2026-04-21 | `mkdirSync` en auto-planner.js |
+| Multi-line goal shell injection | 2026-04-21 | `spawnSync` con args array |
+| runner.js init goal contaminado | 2026-04-21 | filtro de `--root` y su valor |
+| express.json body limit | 2026-04-21 | 1mb en server.js |
 
 ---
 
-## Referencia
-Ver `plans/v8-OrchestOS-fixplan.md` para el plan completo de rediseño del dashboard y roadmap de v1.
+## Do Not Touch (Structural Debt — Sin Diagnóstico Completo)
 
-## Do Not Touch (Structural Debt — No Diagnosis Yet)
-
-- `tasks_yaml_conflict` — root cause untraced. Do not patch.
 - Path escape check (LLM writes outside ROOT_DIR) — no incident on record yet.
 - `refreshSkills`/`detectSkills` missing `--root` — low impact, defer.
+- P8.4 (crash window lock/saveState) — risk low until paralelismo real.
+- P8.5 (double counter mutation) — low impact while loop is sequential.
+- P8.6 (descomposición runner.js en módulos) — ventana óptima post-P8.1 + P6.

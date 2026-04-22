@@ -605,8 +605,11 @@ const setKanbanLoading = (loading) => {
         }
       };
 
+      let currentStatus = 'unknown';
+
       const renderStatus = (state) => {
         const s = state?.status || 'unknown';
+        currentStatus = s;
         statusValue.textContent = s;
         statusValue.className = `header-badge status-badge ${s}`;
       };
@@ -965,7 +968,8 @@ const connectRealtime = () => {
           runBtn.innerHTML = '<span class="spinner sm"></span> Running...';
           runBtn.disabled = true;
           try {
-            const res = await fetch('/api/v1/execute', { method: 'POST' });
+            const endpoint = currentStatus === 'paused' ? '/api/v1/resume' : '/api/v1/execute';
+            const res = await fetch(endpoint, { method: 'POST' });
             const data = await res.json();
             if (data.ok) {
               showToast('Runner started (PID ' + data.pid + ')', 'success');
