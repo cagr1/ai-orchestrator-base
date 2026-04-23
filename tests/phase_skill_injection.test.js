@@ -91,6 +91,8 @@ console.log('Testing Phase Skill Injection...');
     assert(content.includes('output_contract: json_files'), 'Expected output contract field');
     assert(content.includes('max_lines_per_file: 100'), 'Expected max_lines_per_file field');
     assert(content.includes('Generate HTML only.'), 'Expected original body to remain');
+    assert(content.includes('## Constraints'), 'Expected Constraints placeholder section');
+    assert(content.includes('## Output bounds'), 'Expected Output bounds placeholder section');
     console.log('✓ normalizeSkillFile adds frontmatter when missing');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -116,9 +118,12 @@ console.log('Testing Phase Skill Injection...');
     const result = normalizeSkillFile(tmpFile);
     const content = fs.readFileSync(tmpFile, 'utf-8');
 
-    assert(result.changed === false, 'Expected valid frontmatter to remain unchanged');
-    assert.strictEqual(content, original, 'Expected file content to remain untouched');
-    console.log('✓ normalizeSkillFile preserves valid frontmatter');
+    assert(result.changed === true, 'Expected missing sections to be added');
+    assert(content.startsWith('---\nname: custom-skill\n'), 'Expected frontmatter to stay intact');
+    assert(content.includes('Body content.'), 'Expected original body to remain');
+    assert(content.includes('## Constraints'), 'Expected Constraints section to be added');
+    assert(content.includes('## Output bounds'), 'Expected Output bounds section to be added');
+    console.log('✓ normalizeSkillFile preserves frontmatter and adds missing sections');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

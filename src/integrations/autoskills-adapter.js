@@ -1,4 +1,6 @@
 const { execSync } = require('child_process');
+const path = require('path');
+const { normalizeSkillsDirectory } = require('./skill-manager');
 
 const buildArgs = ({ dryRun, yes, agent, verbose }) => {
   const args = ['autoskills'];
@@ -42,4 +44,11 @@ const runAutoskills = ({ cwd, dryRun = true, yes = false, agent, verbose = false
   }
 };
 
-module.exports = { runAutoskills, parseSuggestions };
+const normalizeVendorSkills = (cwd) => {
+  const vendorDir = path.join(cwd, 'skills', 'vendor');
+  const result = normalizeSkillsDirectory(vendorDir);
+  console.log(`[SKILLS] Normalized ${result.normalized} vendor skills, renamed ${result.renamed} files`);
+  return result;
+};
+
+module.exports = { runAutoskills, parseSuggestions, normalizeVendorSkills };

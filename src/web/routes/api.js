@@ -103,6 +103,7 @@ const registerApiRoutes = (app, { dashboard, realtime }) => {
     if (result.error) {
       return res.status(400).json(result);
     }
+    realtime.broadcast('snapshot:updated', dashboard.getSnapshot());
     res.json(result);
   });
 

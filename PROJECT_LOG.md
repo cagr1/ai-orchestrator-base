@@ -78,7 +78,7 @@ The planner, provider, and dashboard service became tightly coupled parts of the
 ## Phase 5 - First Live Runs (2026-04-21 to 2026-04-23)
 
 What was built:
-This is the first phase backed by explicit "run real, then fix" discipline in the repo memory. New operating docs were written (`NEXT_ACTIONS.md`, `PROJECT_STATE.md`, `WORKFLOW_RULES.md`, `SYSTEM_MAP.md`), the execution loop was hardened, the dashboard learned to auto-resume after a paused batch, project creation was guarded against overwriting active work, and the auto-planner learned to split broad CSS tasks and synthesize a final frontend integration step.
+This is the first phase backed by explicit "run real, then fix" discipline in the repo memory. New operating docs were written (`NEXT_ACTIONS.md`, `PROJECT_STATE.md`, `WORKFLOW_RULES.md`, `SYSTEM_MAP.md`), the execution loop was hardened, the dashboard learned to auto-resume after a paused batch, project creation was guarded against overwriting active work, and the auto-planner learned to split broad CSS tasks and synthesize a final frontend integration step. On April 23, the repo also closed the first output-quality loop around skills: executor prompts now inject skill guidance, vendor skills are normalized into visible `.md` entries, and the dashboard now persists/warns about saved goals while reloading kanban state after Config saves.
 
 What broke:
 Live runs exposed issues that the earlier tests did not fully catch:
@@ -91,24 +91,29 @@ Live runs exposed issues that the earlier tests did not fully catch:
 What was learned:
 The team explicitly adopted a better debugging rule: test or reproduce first, fix the source, and then validate in a real run. `PROJECT_STATE.md` now treats browser confirmation and clean reruns from a wiped `project_root` as the standard for saying the loop is actually closed.
 
+Another lesson from April 23 is that prompt quality and dashboard UX were linked more tightly than they first looked. Skill contracts, skill import shape, saved prompt visibility, and realtime snapshot refreshes all turned out to be small contract bugs at system boundaries, not isolated polish tasks.
+
 Architecture changes:
 The auto-planner became more than a task list generator. It now enforces execution-shape constraints:
 - split oversized CSS work into bounded sections
 - require asset tasks to read `index.html`
 - create a final integration task so the HTML consumes generated CSS/JS
 
-At the same time, the dashboard service became responsible for preserving and resuming runtime state, not just triggering processes.
+At the same time, the dashboard service became responsible for preserving and resuming runtime state, not just triggering processes. By the end of April 23, the skills subsystem also had a more explicit contract boundary:
+- executor prompt injection reads skill constraints/output bounds
+- vendor skill import normalizes file shape before indexing
+- dashboard config now preserves the effective prompt used for later planning
 
 ## Phase 6 - Current state and open work
 
 Current state:
-The repo now has a working runner, evidence-backed execution, deterministic task selection, retry/failure handling, a browser dashboard, and an auto-planner that can generate bounded frontend plans. `PROJECT_STATE.md` says the loop has been confirmed three times in live runs, with PTASK-BOUND and PINTEGRATION validated on 2026-04-23. I also re-ran `npm test` successfully while preparing this log.
+The repo now has a working runner, evidence-backed execution, deterministic task selection, retry/failure handling, a browser dashboard, and an auto-planner that can generate bounded frontend plans. `PROJECT_STATE.md` says the loop has been confirmed three times in live runs, with PTASK-BOUND and PINTEGRATION validated on 2026-04-23. Since then, PSKILL-CONTRACT, PSKILL-IMPORT, PGEN-SILENT, and PDASH-RESTORE have been patched in code and verified with a green `npm test` on 2026-04-23 while preparing this update.
 
 Open work:
-The project is not "finished"; it is in an output-quality and UX phase. The biggest open issue is `PSKILL-CONTRACT`: skill files still route model selection but are not injected into the executor prompt, which explains why live output can be structurally correct but content-poor. The dashboard also still has open UX debt around duplicated project-root controls, silent goal reuse, kanban refresh after config save, and richer realtime status.
+The project is not "finished"; it is now past the first skill-contract/output-quality fixes and into validation plus follow-on UX/runtime work. The next important item is `P0`: prove in a real run that failed dependencies are blocked and recorded correctly in `tasks.yaml`. After that, the queue still includes `P2-MODEL`, smaller integrity fixes (`P8.2`, `P8.3`), and the remaining dashboard/realtime polish (`P3`, `P5`, `P7`, `P9`).
 
 The honest summary:
-OrchestOS did not grow in a straight line. It started as a disciplined CLI orchestrator, became a test-heavy runtime, then became a dashboard product, and only after live runs did it start to feel operationally trustworthy. The current codebase reflects that history: strong guardrails, good tests, some large central files, and a few UX seams still being tightened.
+OrchestOS did not grow in a straight line. It started as a disciplined CLI orchestrator, became a test-heavy runtime, then became a dashboard product, and only after live runs did it start to feel operationally trustworthy. The current codebase reflects that history: strong guardrails, good tests, some large central files, and a pattern of discovering that "small" UX issues usually point to a real contract gap underneath.
 
 ## How to keep this up to date
 

@@ -14,7 +14,8 @@ const { execSync } = require('child_process');
 const crypto = require('crypto');
 const callOpenRouter = require('./providers/openrouter');
 const { createMemoryManager } = require('./src/integrations/memory-manager');
-const { runAutoskills } = require('./src/integrations/autoskills-adapter');
+const { runAutoskills, normalizeVendorSkills } = require('./src/integrations/autoskills-adapter');
+const { auditSkillsDirectory } = require('./src/integrations/skill-manager');
 
 const ACTIVE_ROOT = (() => {
   const args = process.argv.slice(2);
@@ -260,9 +261,11 @@ const collectSkills = (dir, baseDir, items = []) => {
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (fs.existsSync(`${full}.md`)) continue;
       collectSkills(full, baseDir, items);
       continue;
     }
+    if (entry.name === 'SKILL.md' && fs.existsSync(`${dir}.md`)) continue;
     if (!entry.name.endsWith('.md')) continue;
     const rel = path.relative(baseDir, full).replace(/\\/g, '/');
     const content = readFile(full) || '';
@@ -2608,6 +2611,26 @@ const main = async () => {
 
   if (command === 'skills') {
     const sub = args[1] || '';
+    if (sub === 'validate') {
+      const skillsDir = path.join(ROOT_DIR, 'skills');
+      const audits = auditSkillsDirectory(skillsDir);
+      if (!audits.length) {
+        console.log('[SKILLS] No skill files found');
+        return;
+      }
+      audits.forEach((item) => {
+        const prefix = item.status === 'valid' ? '✓' : item.status === 'warn' ? '⚠' : '✗';
+        console.log(`${prefix} ${item.filePath} - ${item.message}`);
+      });
+      const summary = audits.reduce((acc, item) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {});
+      console.log(
+        `[SKILLS] Validation complete: ${summary.valid || 0} valid, ${summary.warn || 0} warnings, ${summary.error || 0} errors`
+      );
+      return;
+    }
     if (sub === 'detect') {
       const apply = args.includes('--apply');
       const verbose = args.includes('--verbose') || args.includes('-v');
@@ -2637,6 +2660,9 @@ const main = async () => {
         } catch (_e) {
           console.error('[AUTOSKILLS] Organization step failed. Run: node scripts/organize-autoskills.js');
         }
+        normalizeVendorSkills(ROOT_DIR);
+        const items = buildSkillsIndex();
+        console.log(`[SKILLS] Index rebuilt (${items.length} items)`);
       }
       return;
     }
@@ -2667,6 +2693,9 @@ const main = async () => {
       } catch (_e) {
         console.error('[AUTOSKILLS] Organization step failed. Run: node scripts/organize-autoskills.js');
       }
+      normalizeVendorSkills(ROOT_DIR);
+      const items = buildSkillsIndex();
+      console.log(`[SKILLS] Index rebuilt (${items.length} items)`);
       return;
     }
     if (sub === 'suggest') {
@@ -2686,6 +2715,7 @@ const main = async () => {
       } catch (_e) {
         console.error('[AUTOSKILLS] Organization step failed. Run: node scripts/organize-autoskills.js');
       }
+      normalizeVendorSkills(ROOT_DIR);
       const items = buildSkillsIndex();
       console.log(`[SKILLS] Index rebuilt (${items.length} items)`);
       return;

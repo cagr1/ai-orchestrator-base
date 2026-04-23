@@ -27,15 +27,15 @@ Sin validación en run real, el fix es hipótesis — no solución.
 
 ## Orden canónico de ejecución
 
-1. **PCONFIG-DUP** — ✓ aplicado (2026-04-23)
-2. **PSKILL-CONTRACT** — ✓ patch aplicado por Codex (2026-04-23), pendiente arch-review
-3. **PSKILL-IMPORT** — barrera de normalización en el punto de entrada de skills
-4. **PGEN-SILENT + PDASH-RESTORE** — UX polish (2–4 líneas cada uno)
-5. **P0** — validar dep guard en run real
+1. **PCONFIG-DUP** — ✓ resuelto (2026-04-23)
+2. **PSKILL-CONTRACT** — ✓ resuelto (2026-04-23), npm test verde
+3. **PSKILL-IMPORT** — ✓ resuelto (2026-04-23)
+4. **PGEN-SILENT + PDASH-RESTORE** — ✓ resuelto (2026-04-23)
+5. **P0** — validar dep guard en run real ← **PRÓXIMO**
 6. **P2-MODEL** — model-per-skill después de PSKILL-CONTRACT
 7. **P8.2 / P8.3** — integrity fixes menores
-7. **P3 / P5 / P7 / P9** — UI/UX polish
-8. **P6** — paralelismo (requiere todos los guards anteriores)
+8. **P3 / P5 / P7 / P9** — UI/UX polish
+9. **P6** — paralelismo (requiere todos los guards anteriores)
 
 ---
 
@@ -59,24 +59,17 @@ Sin validación en run real, el fix es hipótesis — no solución.
 
 ---
 
-## PSKILL-CONTRACT — PATCH APLICADO, PENDIENTE ARCH-REVIEW (2026-04-23)
+## PSKILL-CONTRACT — ✓ RESUELTO (2026-04-23)
 
-**Codex implementó**:
-- `src/integrations/skill-manager.js:139` — `normalizeSkillFile(filePath)` exportada; vendor stubs renombrados a `.md` y normalizados
-- `runner.js:630` — inyección de skill en `buildExecutionPrompt`; bloque `--- SKILL GUIDELINES ---` en línea ~704; warn sin throw en ~713
-- `runner.js:3114` — `buildExecutionPrompt` exportada
-- `tests/phase_skill_injection.test.js` — nuevo; passed standalone y en `npm test`
-- **NOTA**: test NO agregado a `tests/run-all.js` — pendiente fix
+- `normalizeSkillFile()` en `skill-manager.js:139`
+- Inyección `--- SKILL GUIDELINES ---` en `runner.js:704`
+- Vendor paths añadidos a `skillCandidates` (`runner.js:678-682`)
+- Warns separados: "found but no sections" vs "file not found"
+- `skills/frontend-html-basic.md` limpiado — JSON embedded eliminado
+- `tests/phase_skill_injection.test.js` registrado en `run-all.js`
+- `npm test` verde
 
-**Arch-review completado (2026-04-23) — 4 issues encontrados, prompt de fix listo para Codex**:
-
-1. **CRÍTICO** `skills/frontend-html-basic.md:40-50` — JSON template + "Output only markdown" dentro de `## Output bounds` se inyecta verbatim → dos schemas JSON contradictorios en el prompt del executor. Fix: eliminar líneas 40-50, auditar otros skill files.
-2. **Menor** `runner.js:~713` — warn message dice "not found" aunque el archivo sí existe pero no tiene secciones. Fix: separar en dos warns distintos.
-3. **Simple** `tests/run-all.js` — `phase_skill_injection.test.js` no registrado. Fix: agregar una línea.
-4. **Medio** `runner.js:678-681` — vendor paths (`skills/vendor/backend/`, `skills/vendor/frontend/`) no están en la lista de candidatos. Fix: añadir dos entradas al array.
-
-**Pendiente antes de marcar cerrado**:
-- Correr prompt de fix en Codex → `npm test` verde → validar en run real que executor recibe SKILL GUIDELINES sin JSON duplicado
+→ HISTORY.md para detalles completos.
 
 ---
 

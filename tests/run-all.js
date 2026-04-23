@@ -17,6 +17,7 @@ try {
   require('./phase_auto_planner_integration.test');
   require('./phase_auto_planner_task_sizing.test');
   require('./phase_skill_injection.test');
+  require('./phase_skill_import.test');
   
   console.log("\n=== ALL TESTS PASSED ===");
   process.exit(0);

@@ -250,6 +250,22 @@ Commit: `3474ea4188b612789843f65d2ed6fce740499c0e` (`Guard project creation and 
 
 ## 2026-04-23 - Current verified state
 
+### Skill injection contract and vendor-skill visibility
+Commit: `4af1c6167ae6e3de89c8d15e629180f1be94b63a` (`Improve skill injection and planner skill coverage`)
+
+- Symptom: skill files could select a model but still never reach the executor prompt, and vendor skills without `.md` stayed invisible to the registry.
+- Root cause: `buildExecutionPrompt` was not injecting skill guidance sections, and skill normalization/indexing still assumed a narrower set of file shapes.
+- Changed: executor prompt injection now happens in [runner.js](runner.js:633) and [runner.js](runner.js:709); vendor normalization/auditing now lives in [src/integrations/skill-manager.js](src/integrations/skill-manager.js:165), [src/integrations/skill-manager.js](src/integrations/skill-manager.js:267), and [src/integrations/skill-manager.js](src/integrations/skill-manager.js:339); autoskills post-processing now calls normalization in [src/integrations/autoskills-adapter.js](src/integrations/autoskills-adapter.js:47); CLI auditing is exposed at [runner.js](runner.js:2616); the suite now includes [tests/phase_skill_injection.test.js](tests/phase_skill_injection.test.js:96), [tests/phase_skill_injection.test.js](tests/phase_skill_injection.test.js:126), and [tests/phase_skill_import.test.js](tests/phase_skill_import.test.js:91), registered in [tests/run-all.js](tests/run-all.js:19).
+- Validation: `npm test` was green on 2026-04-23; current targeted coverage lives in `tests/phase_auto_planner_task_sizing.test.js`, `tests/phase_skill_injection.test.js`, and `tests/phase_skill_import.test.js`.
+
+### Dashboard warning and restore fixes after output-quality hardening
+Working tree verified on 2026-04-23 before push; no earlier commit hash captured this exact follow-up.
+
+- Symptom: "Generate Tasks" could silently reuse a saved goal when the textarea was empty, and saving a new project root from Config did not refresh the kanban until a manual reload.
+- Root cause: `initProject` persisted `project_root` but not the goal prompt, the Generate Tasks handler had no visibility warning for saved prompt fallback, and the config save path did not trigger a fresh snapshot reload in the UI.
+- Changed: prompt persistence now happens in [src/web/services/dashboard-service.js](src/web/services/dashboard-service.js:308); config-save broadcast now happens in [src/web/routes/api.js](src/web/routes/api.js:106); the dashboard stores the loaded prompt, warns on empty-textarea generation, and reloads after config save in [src/web/public/dashboard/index.html](src/web/public/dashboard/index.html:594), [src/web/public/dashboard/index.html](src/web/public/dashboard/index.html:849), and [src/web/public/dashboard/index.html](src/web/public/dashboard/index.html:930).
+- Validation: `npm test` was green on 2026-04-23 after the dashboard changes; no browser recording is committed, so live visual validation details are not recoverable from git.
+
 - Current confirmed working areas are summarized in `PROJECT_STATE.md`.
 - Current unresolved items are deliberately tracked in `NEXT_ACTIONS.md` rather than duplicated here.
 - Fresh verification for this documentation pass: `npm test` succeeded on 2026-04-23 and ran all tests listed in `tests/run-all.js`.

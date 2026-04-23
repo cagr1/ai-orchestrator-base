@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const VALID_OUTPUT_CONTRACTS = new Set(['json_files', 'markdown', 'none']);
+const REQUIRED_SECTIONS = ['Constraints', 'Output bounds'];
 
 const readFile = (filepath) => {
   try {
@@ -117,8 +119,32 @@ const hasValidNormalizedFrontmatter = (attributes) => {
     attributes &&
     typeof attributes.name === 'string' &&
     typeof attributes.description === 'string' &&
-    typeof attributes.output_contract === 'string'
+    typeof attributes.output_contract === 'string' &&
+    VALID_OUTPUT_CONTRACTS.has(attributes.output_contract)
   );
+};
+
+const hasSection = (body, heading) => {
+  const lines = String(body || '').split(/\r?\n/);
+  return lines.some((line) => line.trim() === `## ${heading}`);
+};
+
+const ensureRequiredSections = (body) => {
+  let nextBody = String(body || '');
+  const addedSections = [];
+
+  REQUIRED_SECTIONS.forEach((heading) => {
+    if (hasSection(nextBody, heading)) return;
+    nextBody = nextBody.replace(/\s*$/, '');
+    nextBody += `${nextBody.trim() ? '\n\n' : ''}## ${heading}\n\n`;
+    addedSections.push(heading);
+  });
+
+  if (nextBody && !nextBody.endsWith('\n')) {
+    nextBody += '\n';
+  }
+
+  return { body: nextBody, addedSections };
 };
 
 const serializeFrontmatter = (attributes) => {
@@ -139,24 +165,51 @@ const serializeFrontmatter = (attributes) => {
 const normalizeSkillFile = (filePath) => {
   const original = readFile(filePath);
   if (original === null) {
-    return { changed: false, content: null, metadata: null };
+    return {
+      changed: false,
+      content: null,
+      metadata: null,
+      added_frontmatter: false,
+      added_sections: [],
+      renamed: false,
+      filePath
+    };
   }
 
   const parsed = splitFrontmatter(original);
   const existing = parsed.attributes || {};
-  if (parsed.hasFrontmatter && hasValidNormalizedFrontmatter(existing)) {
-    return { changed: false, content: original, metadata: existing };
-  }
-
   const derived = deriveSkillMetadata(filePath, parsed.body);
   const normalized = { ...derived, ...existing };
   if (derived.max_lines_per_file !== undefined && existing.max_lines_per_file === undefined) {
     normalized.max_lines_per_file = derived.max_lines_per_file;
   }
+  const sectionResult = ensureRequiredSections(parsed.body);
+  const hasValidFrontmatter = parsed.hasFrontmatter && hasValidNormalizedFrontmatter(existing);
+  const needsChange = !hasValidFrontmatter || sectionResult.addedSections.length > 0;
 
-  const nextContent = `${serializeFrontmatter(normalized)}${parsed.body}`;
+  if (!needsChange) {
+    return {
+      changed: false,
+      content: original,
+      metadata: existing,
+      added_frontmatter: false,
+      added_sections: [],
+      renamed: false,
+      filePath
+    };
+  }
+
+  const nextContent = `${serializeFrontmatter(normalized)}${sectionResult.body}`;
   fs.writeFileSync(filePath, nextContent, 'utf-8');
-  return { changed: true, content: nextContent, metadata: normalized };
+  return {
+    changed: true,
+    content: nextContent,
+    metadata: normalized,
+    added_frontmatter: !hasValidFrontmatter,
+    added_sections: sectionResult.addedSections,
+    renamed: false,
+    filePath
+  };
 };
 
 const collectSkills = (dir, baseDir, items = []) => {
@@ -164,9 +217,11 @@ const collectSkills = (dir, baseDir, items = []) => {
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (fs.existsSync(`${full}.md`)) continue;
       collectSkills(full, baseDir, items);
       continue;
     }
+    if (entry.name === 'SKILL.md' && fs.existsSync(`${dir}.md`)) continue;
     if (!entry.name.endsWith('.md')) continue;
     const rel = path.relative(baseDir, full).replace(/\\/g, '/');
     const content = readFile(full) || '';
@@ -183,6 +238,144 @@ const collectSkills = (dir, baseDir, items = []) => {
   return items;
 };
 
+const renameSkillFileToMarkdown = (filePath) => {
+  if (path.extname(filePath).toLowerCase() === '.md') {
+    return { filePath, renamed: false };
+  }
+  const nextPath = `${filePath}.md`;
+  if (fs.existsSync(nextPath)) {
+    return { filePath: nextPath, renamed: false };
+  }
+  fs.renameSync(filePath, nextPath);
+  return { filePath: nextPath, renamed: true };
+};
+
+const materializeSkillWrapper = (skillDirPath) => {
+  const sourceFile = path.join(skillDirPath, 'SKILL.md');
+  if (!fs.existsSync(sourceFile)) return null;
+  const wrapperPath = `${skillDirPath}.md`;
+  const sourceContent = readFile(sourceFile);
+  if (sourceContent === null) return null;
+  const previousContent = readFile(wrapperPath);
+  const changed = previousContent !== sourceContent;
+  if (changed) {
+    fs.writeFileSync(wrapperPath, sourceContent, 'utf-8');
+  }
+  return { wrapperPath, changed };
+};
+
+const normalizeSkillsDirectory = (dir) => {
+  const result = {
+    normalized: 0,
+    renamed: 0,
+    materialized: 0,
+    files: []
+  };
+  if (!fs.existsSync(dir)) return result;
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const materialized = materializeSkillWrapper(full);
+      if (materialized) {
+        if (materialized.changed) {
+          result.materialized += 1;
+        }
+        const normalized = normalizeSkillFile(materialized.wrapperPath);
+        if (normalized.changed) {
+          result.normalized += 1;
+        }
+        result.files.push({ ...normalized, filePath: materialized.wrapperPath });
+        continue;
+      }
+      const nested = normalizeSkillsDirectory(full);
+      result.normalized += nested.normalized;
+      result.renamed += nested.renamed;
+      result.materialized += nested.materialized;
+      result.files.push(...nested.files);
+      continue;
+    }
+
+    const renamed = renameSkillFileToMarkdown(full);
+    if (renamed.renamed) {
+      result.renamed += 1;
+    }
+    const normalized = normalizeSkillFile(renamed.filePath);
+    if (normalized.changed) {
+      result.normalized += 1;
+    }
+    result.files.push({ ...normalized, renamed: renamed.renamed, filePath: renamed.filePath });
+  }
+
+  return result;
+};
+
+const auditSkillFile = (filePath) => {
+  const content = readFile(filePath);
+  if (content === null) {
+    return { filePath, status: 'error', message: 'unreadable' };
+  }
+
+  const parsed = splitFrontmatter(content);
+  if (!parsed.hasFrontmatter) {
+    return { filePath, status: 'error', message: 'no frontmatter' };
+  }
+
+  const attributes = parsed.attributes || {};
+  if (!attributes.output_contract) {
+    return { filePath, status: 'warn', message: 'missing output_contract' };
+  }
+  if (!VALID_OUTPUT_CONTRACTS.has(attributes.output_contract)) {
+    return { filePath, status: 'warn', message: `invalid output_contract: ${attributes.output_contract}` };
+  }
+  if (typeof attributes.name !== 'string' || typeof attributes.description !== 'string') {
+    return { filePath, status: 'warn', message: 'missing required frontmatter fields' };
+  }
+
+  return { filePath, status: 'valid', message: 'valid' };
+};
+
+const auditSkillsDirectory = (dir, baseDir = dir, items = []) => {
+  if (!fs.existsSync(dir)) return items;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (fs.existsSync(`${full}.md`)) {
+        items.push(auditSkillFile(`${full}.md`));
+        continue;
+      }
+      auditSkillsDirectory(full, baseDir, items);
+      continue;
+    }
+
+    if (entry.name === 'SKILL.md' && fs.existsSync(`${dir}.md`)) {
+      continue;
+    }
+
+    const ext = path.extname(entry.name).toLowerCase();
+    if (ext !== '.md') {
+      if (ext) {
+        continue;
+      }
+      items.push({
+        filePath: path.relative(baseDir, full).replace(/\\/g, '/'),
+        status: 'warn',
+        message: 'missing .md extension'
+      });
+      continue;
+    }
+
+    const audit = auditSkillFile(full);
+    items.push({
+      ...audit,
+      filePath: path.relative(baseDir, full).replace(/\\/g, '/')
+    });
+  }
+  return items;
+};
+
 const buildUnifiedSkillsIndex = (skillsDir, outFile) => {
   if (!fs.existsSync(skillsDir)) return [];
   const items = collectSkills(skillsDir, skillsDir);
@@ -192,4 +385,10 @@ const buildUnifiedSkillsIndex = (skillsDir, outFile) => {
   return items;
 };
 
-module.exports = { buildUnifiedSkillsIndex, normalizeSkillFile };
+module.exports = {
+  auditSkillFile,
+  auditSkillsDirectory,
+  buildUnifiedSkillsIndex,
+  normalizeSkillFile,
+  normalizeSkillsDirectory
+};

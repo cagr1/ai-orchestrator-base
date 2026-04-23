@@ -2,8 +2,7 @@
 
 Sistema multi-agente **determinístico y paralelo** donde agentes especializados interactúan entre sí para desarrollar proyectos de software de forma automatizada, con protección contra fatiga de LLM y recuperación ante fallos.
 
-**Actualización v3.0.1**: Ahora con ejecución real de tareas usando LLM, generación de código y escritura automática de archivos.  
-**Integración v5**: Memoria persistente con Engram, Autoskills inteligente y dashboard web.
+**v3.0 + Output Quality Phase (2026-04-23)**: Loop de ejecución confirmado tres veces. Skill files inyectados en el prompt del executor. Skills normalizadas automáticamente al instalar. UX del dashboard limpiado (duplicados de config eliminados, goal preservado, kanban recarga al guardar). 40+ tests invariantes pasando.
 
 ---
 
@@ -54,11 +53,12 @@ Sistema multi-agente **determinístico y paralelo** donde agentes especializados
 - **🚀 Comando simple**: `npm run dashboard` o `node src/web/server.js`
 
 ### 🔧 **Sistema de Skills Avanzado**
-- **🎯 Configuración por Proyecto**: `project_type` y `allowed_stacks`
-- **📊 Tiers Automáticos**: Basic, Professional, Premium con triggers por palabras clave
-- **🔧 Selectores Inteligentes**: `skill_selector` para tipos de proyecto (landing, api, database, etc.)
-- **⚙️ Triggers Configurables**: Auto-upgrade basado en descripción del proyecto
-- **🧪 Validación Completa**: Skills permitidas vs usadas en tareas
+- **🎯 Inyección en el Executor**: `buildExecutionPrompt` lee `## Constraints` y `## Output bounds` del skill file y los inyecta como bloque `SKILL GUIDELINES` antes de la task description
+- **📐 Schema Estándar**: Frontmatter obligatorio (`name`, `description`, `output_contract`); secciones opcionales `## Constraints` / `## Output bounds`
+- **🔄 Normalización Automática**: `normalizeSkillFile()` agrega frontmatter y secciones faltantes; vendor skills sin `.md` son renombrados automáticamente al instalar
+- **🛡️ Barrera en Autoskills**: Post-install hook normaliza todos los skills de `skills/vendor/` antes de que el runner los use
+- **🔍 Auditoría CLI**: `node runner.js skills validate` — reporte de valid/warning/error por skill (no bloqueante, exit 0)
+- **📂 Vendor paths**: Runner busca skills en `skills/`, `skills/frontend/`, `skills/backend/`, `skills/vendor/frontend/`, `skills/vendor/backend/`
 
 ### 💰 **Sistema de Costos y Presupuesto**
 - **📊 Tracking en Tiempo Real**: Registra costos en `system/cost.json`
@@ -68,11 +68,11 @@ Sistema multi-agente **determinístico y paralelo** donde agentes especializados
 - **⚙️ CLI de Costos**: Comandos `cost set`, `cost add`
 
 ### 🧪 **Testing Robustecido**
-- **✅ 30+ Tests**: Validación invariante sin frameworks pesados
-- **🔍 Fases Completas**: State Schema, Batch Selection, Validaciones, Simulaciones
+- **✅ 40+ Tests**: Validación invariante sin frameworks pesados
+- **🔍 Fases Completas**: State Schema, Batch Selection, Validaciones, Simulaciones, Skill Injection, Skill Import
 - **🚀 Determinismo Garantizado**: Tests aseguran mismo input → mismo output
 - **🛡️ Validación de Reglas**: R9, R10, R11, dependencias, cycles
-- **📊 Workflows Completo**: Simulaciones end-to-end
+- **📊 Workflows Completo**: Simulaciones end-to-end + auto-planner task sizing
 
 ---
 
@@ -221,6 +221,9 @@ node runner.js skills detect --apply
 
 # 4. Buscar skills específicos
 node runner.js skills search "frontend"
+
+# 5. Auditar schema de todos los skills (no bloqueante)
+node runner.js skills validate
 ```
 
 **Características:**
@@ -635,65 +638,55 @@ npm test
 ```
 
 **Fases testeadas:**
-- Phase 1: State Schema (simplificado, no duplicación)
+- Phase 1: State Schema (lock, version, forbidden fields)
 - Phase 4: Batch Selection (paralelo, determinístico)
 - Phase 10: Recalculation Rule (estados desde dependencias)
 - Phase 11-14: Validaciones (R9, completion, deps, R10)
 - Phase 15-17: Features finales (lock TTL, determinismo, R11)
-- Phase 18: Simulaciones (workflows completos)
+- Phase 18: Simulaciones end-to-end (7 workflows)
+- Phase 18b: Attempts / Max Attempts / permanent failure
+- Phase 5B: Memory Compaction
+- Phase 19: Corrective Tasks
+- Skill Hygiene: sub-skills, frontmatter, backward compat
+- Tasks Lock: optimistic lock prevents external overwrites
+- Skill Injection: `buildExecutionPrompt` injects SKILL GUIDELINES
+- Skill Import: `normalizeSkillsDirectory`, vendor normalization, audit
+- Auto Planner: integration inputs, task sizing bounds
 
 ---
 
 ## ✅ **Estado Actual y Capacidades**
 
-### 🏆 **Fortalezas y Características Únicas**
+### 🏆 **Resuelto y Validado (2026-04-23)**
 
-**🚀 Ejecución Automática End-to-End:**
-- **Generación de Código Completa**: Desde prompt hasta archivos en disco
-- **Parseo Inteligente**: Extracción robusta de JSON de respuestas LLM
-- **Validación Estricta**: R10 previene cambios fuera de `task.output`
-- **Modelos Optimizados**: Selección por skill y costo (free → premium)
+| Item | Detalle |
+|------|---------|
+| **Loop cierra limpio** | Confirmado 3 veces: demo2 (T1–T6), demo3 (minimax), demo3-wipe (clean run) |
+| **PTASK-BOUND** | Planner genera sub-tareas CSS/JS con budget de 100 líneas; validado en run real |
+| **PINTEGRATION** | `index.html` enlaza `styles.css` + `main.js`; DevTools 200 en run real |
+| **P8.1 tasks_yaml_conflict** | `runner.js:870` → `needs_review`; lock optimista detecta colisión |
+| **PCONFIG-DUP** | Un solo input de project root; hint "Using: [path] · Edit in Config" |
+| **PSKILL-CONTRACT** | Skill files inyectados en executor via `SKILL GUIDELINES`; JSON embedded eliminado de `frontend-html-basic.md` |
+| **PSKILL-IMPORT** | `normalizeSkillFile()` en post-install; vendor skills `.md`-renombrados; `skills validate` CLI |
+| **PGEN-SILENT** | `initProject` persiste goal; toast "Using saved goal: …" cuando textarea vacío |
+| **PDASH-RESTORE** | Config save emite `snapshot:updated`; `loadInitial()` recarga kanban automáticamente |
+| **P0 dep guard** | `runner.js:2081` bloquea tarea si dep está `failed`; pendiente validación en run real |
+| **P1 compact retry** | Truncación rompe batch; `truncation_retry: true` persiste para siguiente run |
+| **Create Project guard** | `dashboard-service.js:285` bloquea sobreescribir proyectos activos |
+| **Dashboard state restore** | `loadInitial()` restaura kanban/status/prompt al hacer F5 |
 
-**🧠 Sistema de Memoria Avanzado:**
-- **Integración Engram Completa**: HTTP API con timeout y fallback
-- **Sesiones Contextuales**: Múltiples proyectos con memoria separada
-- **Búsqueda Semántica**: API `/search` con filtros por proyecto
-- **Compaction Inteligente**: Mantiene relevancia histórica
+### 🚀 **Ejecución Automática End-to-End**
+- Desde prompt hasta archivos en disco via OpenRouter
+- Parseo robusto de JSON de respuestas LLM
+- Validación R10: archivos generados deben estar en `task.output`
+- Skill guidelines del `## Constraints` / `## Output bounds` del skill file inyectadas en cada prompt
 
-**🧩 Autoskills Inteligente:**
-- **Detección Automática**: Analiza stack tecnológico del proyecto
-- **Organización por Categorías**: `skills/vendor/<categoria>/` automático
-- **Sugerencias Persistidas**: `system/skill_suggestions.json` para referencia
-- **CLI Integrado**: `detect`, `suggest`, `install`, `search`
-
-**📊 Dashboard Web Completo:**
-- **Interfaz en Tiempo Real**: Websockets para updates inmediatos
-- **Visualización de Progreso**: Status, riesgos, dependencias
-- **API REST Completa**: Integración con otras herramientas
-- **Comando Simple**: `npm run dashboard` o `node src/web/server.js`
-
-**🔧 Sistema de Skills Avanzado:**
-- **Configuración por Proyecto**: `project_type` y `allowed_stacks`
-- **Tiers Automáticos**: Basic, Professional, Premium con triggers
-- **Selectores Inteligentes**: `skill_selector` para tipos de proyecto
-- **Validación Completa**: Skills permitidas vs usadas
-
-**💰 Gestión de Costos:**
-- **Tracking en Tiempo Real**: `system/cost.json` con historial
-- **Presupuesto Configurable**: Límites por proyecto
-- **CLI de Costos**: `cost set`, `cost add`, status integration
-
-**🛡️ Protecciones Empresariales:**
-- **Determinismo Garantizado**: Mismo input → mismo output siempre
-- **Lock Optimista**: Previene corrupción con múltiples editores
-- **TTL Automático**: Locks expiran después de 30 minutos
-- **Validaciones R9-R11**: Tamaño, outputs, protección planner
-- **Cooldown Inteligente**: Pausa tras 3 fallos consecutivos
-
-**🧪 Testing Robustecido:**
-- **30+ Tests Invariantes**: Sin frameworks pesados
-- **Fases Completas**: State, Batch, Validaciones, Simulaciones
-- **Determinismo Verificado**: Tests aseguran comportamiento predecible
+### 🛡️ **Protecciones Activas**
+- Determinismo garantizado: mismo `tasks.yaml` → mismo batch
+- Lock optimista con TTL 30 min (stale lock auto-cleared)
+- R9/R10/R11: tamaño de tarea, outputs autorizados, protección planner
+- Dependency guard: tarea bloqueada si dependencia `failed`
+- Cooldown tras 3 fallos consecutivos
 
 ### 📈 **Dashboard Web - Características**
 
@@ -895,43 +888,30 @@ $ node runner.js status
 
 ---
 
-## 🆕 **¿Qué hay de Nuevo en v3.0.1 + v5?**
+## 🆕 **Output Quality Phase — Resuelto 2026-04-23**
 
-### **🚀 Ejecución Automática con LLM (v3.0.1)**
-- Integración completa con OpenRouter API
-- Generación de código desde prompts estructurados
-- Escritura automática de archivos en disco
-- Parseo robusto de respuestas JSON
-- Validación R10 anti-hallucination
+### **🔧 PSKILL-CONTRACT — Skills llegan al executor**
+- `buildExecutionPrompt` inyecta `## Constraints` + `## Output bounds` de cada skill como bloque `--- SKILL GUIDELINES ---`
+- Skills sin frontmatter válido → warning en log, no crash
+- Vendor paths añadidos al search: `skills/vendor/frontend/`, `skills/vendor/backend/`
+- `skills/frontend-html-basic.md` limpiado: JSON template embedded eliminado (generaba schema duplicado en el prompt)
 
-### **🧠 Memoria Persistente con Engram (v5 Día 1)**
-- Sistema HTTP API completo con fallback
-- Sesiones contextuales por proyecto
-- Búsqueda semántica en memoria histórica
-- Compaction inteligente para relevancia
-- Integración CLI: `memory search`, `memory stats`
+### **🛡️ PSKILL-IMPORT — Barrera de normalización**
+- `normalizeSkillFile()`: agrega frontmatter y secciones faltantes; vendor skills sin `.md` renombrados
+- Post-install hook en `autoskills-adapter.js`: toda skill instalada pasa por normalización antes de ser usable
+- `node runner.js skills validate`: auditoría de valid/warning/error (no bloqueante)
 
-### **🧩 Autoskills Inteligente (v5 Día 1)**
-- Detección automática de stack tecnológico
-- Organización por categorías en `skills/vendor/`
-- Sugerencias persistidas en JSON
-- CLI integrado: `skills detect`, `suggest`, `install`
-- Script de organización automática
+### **🎨 UX Dashboard — PCONFIG-DUP + PGEN-SILENT + PDASH-RESTORE**
+- Un solo input de project root (`#projectPath` en Config); hint "Using: [path]" en prompt tab
+- `initProject` persiste el goal; toast advierte si textarea vacío al generar tasks
+- Config save emite `snapshot:updated` + recarga kanban automáticamente
 
-### **📊 Dashboard Web Completo**
-- Interfaz web con websockets en tiempo real
-- API REST para integración externa
-- Visualización de progreso y riesgos
-- Panel de costos y presupuesto
-- Comando simple: `npm run dashboard`
-
-### **🔧 Sistema de Skills Avanzado**
-- Configuración por tipo de proyecto
-- Tiers automáticos (Basic, Professional, Premium)
-- Triggers por palabras clave en descripción
-- Selectores inteligentes por dominio
-- Validación completa de skills permitidas
+### **🧪 Testing expandido**
+- `phase_skill_injection.test.js`: verifica inyección de SKILL GUIDELINES y warn en skill no encontrado
+- `phase_skill_import.test.js`: verifica normalización de vendor directory y auditoría
+- `phase_auto_planner_task_sizing.test.js`: verifica bounds CSS en planner
+- `phase_tasks_lock.test.js`: verifica lock optimista en save concurrente
 
 ---
 
-**Versión:** 3.0.1 + v5 Features (Memoria + Autoskills + Dashboard)
+**Versión:** 3.0 — Output Quality Phase (loop cierra + skills al executor + UX dashboard)

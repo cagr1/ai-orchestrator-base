@@ -591,6 +591,7 @@ const setKanbanLoading = (loading) => {
       };
 
       let currentStatus = 'unknown';
+      let savedPrompt = '';
 
       const renderStatus = (state) => {
         const s = state?.status || 'unknown';
@@ -607,6 +608,7 @@ const setKanbanLoading = (loading) => {
         const state = snapshot.state || {};
         renderStatus(state);
         renderTasks(data.tasks || [], snapshot.task_counts);
+        savedPrompt = data.project?.prompt || '';
         if (data.project?.prompt) promptInput.value = data.project.prompt;
         if (data.project?.project_root) projectPath.value = data.project.project_root;
         if (data.runHistory) renderRunHistory(data.runHistory);
@@ -844,6 +846,7 @@ const connectRealtime = () => {
           showToast('Error: ' + data.error, 'error');
         } else {
           showToast('Project path saved', 'success');
+          await loadInitial();
           updateRootHint();
         }
       });
@@ -926,6 +929,10 @@ const connectRealtime = () => {
       if (generateTasksBtn) {
         generateTasksBtn.addEventListener('click', async () => {
           const goal = document.getElementById('promptInput')?.value?.trim() || '';
+          if (goal === '' && savedPrompt.trim()) {
+            const preview = savedPrompt.trim().slice(0, 60);
+            showToast(`Using saved goal: ${preview}${savedPrompt.trim().length > 60 ? '…' : ''}`, 'info');
+          }
           generateTasksBtn.innerHTML = '<span class="spinner sm"></span> Generating...';
           generateTasksBtn.disabled = true;
           try {

@@ -305,7 +305,7 @@ const createDashboardService = ({ rootDir, realtime, websocket }) => {
   const initProject = (goal, projectRoot) => {
     if (!projectRoot) return { ok: false, output: 'project_root is required' };
     try {
-      const next = updateDashboardConfig({ project_root: projectRoot });
+      const next = updateDashboardConfig({ project_root: projectRoot, prompt: goal });
       if (next.error) return { ok: false, error: 'invalid_project_root', output: next.error };
       const existingProject = getExistingProjectGuard(next.project_root);
       if (existingProject) return existingProject;
