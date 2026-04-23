@@ -2,7 +2,7 @@
 
 Sistema multi-agente **determinístico y paralelo** donde agentes especializados interactúan entre sí para desarrollar proyectos de software de forma automatizada, con protección contra fatiga de LLM y recuperación ante fallos.
 
-**v3.0 + Output Quality Phase (2026-04-23)**: Loop de ejecución confirmado tres veces. Skill files inyectados en el prompt del executor. Skills normalizadas automáticamente al instalar. UX del dashboard limpiado (duplicados de config eliminados, goal preservado, kanban recarga al guardar). 40+ tests invariantes pasando.
+**v3.0**: Orquestador determinístico con ejecución automática via LLM. Skill files inyectados en cada prompt. Quality-gating por evidencia (R10). Dashboard web incluido. 40+ tests invariantes.
 
 ---
 
@@ -37,13 +37,16 @@ Sistema multi-agente **determinístico y paralelo** donde agentes especializados
 - **🔄 Ejecución Paralela**: Selección declarativa de batches (hasta 3 tareas simultáneas)
 
 ### 🎯 **Selección Inteligente de Modelos**
-- **💰 Optimización por Costo**: 3 niveles: free, low-cost, premium
-- **🎨 Mapeo por Skill**: Configuración detallada en `system/config.json`
-- **🚀 Modelos Especializados**: 
-  - **Free**: minimax-m2.5, qwen3.6-plus, step-3.5-flash
-  - **Low-cost**: deepseek-v3.2, grok-4.1-fast, kimi-k2.5, qwen3-coder-next
-  - **Premium**: claude-opus-4.6, gpt-5.3-codex
-- **📊 Sistema de Tiers**: Basic, Professional, Premium con triggers automáticos
+- **💰 Optimización por Configuración**: Cada skill se mapea a un `model key` via `model_mapping`
+- **🎨 Mapeo por Skill**: Los modelos reales se definen en `providers.*.models`
+- **🚀 Configuración Real del Sistema**:
+  ```json
+  {
+    "model_mapping": { "frontend-html-basic": "base", "default": "base" },
+    "providers": { "openrouter": { "models": { "base": "minimax/minimax-m2.7" } } }
+  }
+  ```
+- **📊 Sistema Extensible**: Puedes cambiar proveedor o modelos sin tocar el core
 
 ### 📈 **Dashboard Web Completo**
 - **🌐 Servidor Express**: Interfaz web en `http://localhost:3000`
@@ -78,13 +81,13 @@ Sistema multi-agente **determinístico y paralelo** donde agentes especializados
 
 ## 🔌 Agnóstico por Diseño
 
-Este repo no depende de un proveedor de LLM. El contrato del sistema es:
+El sistema requiere un proveedor de LLM para ejecución automática. Lo que es extensible por diseño es qué proveedor usas:
 - `system/tasks.yaml` como interfaz (qué hay que hacer y qué archivos se permiten tocar).
-- `skills/` y `agents/*.md` como prompts reutilizables (puedes usarlos con Codex, ChatGPT, Kilo, etc.).
-- `runner.js` como orquestador determinístico que valida reglas y propone el siguiente batch.
-- `providers/openrouter.js` como bridge para ejecutar tareas con LLM real.
+- `skills/` y `agents/*.md` como prompts reutilizables.
+- `runner.js` como orquestador determinístico que valida reglas y selecciona el siguiente batch.
+- `providers/openrouter.js` como bridge activo (extensible a Ollama, Anthropic, OpenAI).
 
-Lo intencionalmente "no agnóstico" son tus *skills* (tu conocimiento codificado). Puedes llevarte el runner a otro repo y cambiar la librería de skills sin tocar el core.
+Lo intencionalmente tuyo son tus *skills* (tu conocimiento codificado). Puedes usar el runner con cualquier proveedor compatible y cambiar la librería de skills sin tocar el core.
 
 ### 🚀 **Ejecución Automática con OpenRouter**
 
@@ -126,17 +129,17 @@ cat system/events.log
 ```json
 {
   "model_mapping": {
-    "frontend-react-hooks": "free_advanced",
-    "architecture-global-architect": "heavy_architecture",
-    "database-postgres-schema": "low_cost_coding",
-    "default": "free_basic"
+    "frontend-html-basic": "base",
+    "backend-node-api": "base",
+    "architecture-global-architect": "base",
+    "default": "base"
   },
   "providers": {
     "openrouter": {
+      "type": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1/chat/completions",
       "models": {
-        "free_basic": "minimax/minimax-m2.5:free",
-        "low_cost_coding": "deepseek/deepseek-v3.2",
-        "heavy_architecture": "anthropic/claude-opus-4.6"
+        "base": "minimax/minimax-m2.7"
       }
     }
   }
@@ -380,20 +383,14 @@ agents/
 ### **Web Dashboard & API**
 ```
 src/web/
-├── server.js              # Servidor Express con websockets
-├── routes/                # Rutas API REST
-│   ├── status.js          # Endpoint de estado del sistema
-│   ├── tasks.js           # CRUD de tareas
-│   └── memory.js          # Búsqueda en memoria
-├── services/              # Servicios de negocio
-│   ├── state-service.js   # Gestión de estado del runner
-│   └── websocket-service.js # Comunicación en tiempo real
-├── public/                # Assets estáticos
-│   ├── index.html         # Dashboard principal
-│   ├── styles.css         # Estilos del dashboard
-│   └── app.js             # Lógica frontend con HTMX
-└── sockets/               # Handlers de websockets
-    └── events.js          # Broadcast de eventos del runner
+├── server.js                         # Servidor Express con SSE
+├── routes/
+│   └── api.js                        # Endpoints REST + SSE broadcast
+├── services/
+│   └── dashboard-service.js          # Lógica de negocio, planner, runner spawn
+└── public/
+    └── dashboard/
+        └── index.html                # Dashboard completo (kanban, config, logs)
 ```
 
 ### **Templates & Domain Packs**
@@ -670,7 +667,7 @@ npm test
 | **PSKILL-IMPORT** | `normalizeSkillFile()` en post-install; vendor skills `.md`-renombrados; `skills validate` CLI |
 | **PGEN-SILENT** | `initProject` persiste goal; toast "Using saved goal: …" cuando textarea vacío |
 | **PDASH-RESTORE** | Config save emite `snapshot:updated`; `loadInitial()` recarga kanban automáticamente |
-| **P0 dep guard** | `runner.js:2081` bloquea tarea si dep está `failed`; pendiente validación en run real |
+| **P0 dep guard** | `recalculateTaskStates` bloquea tarea si dep está `failed`; validado 2026-04-23 en run real |
 | **P1 compact retry** | Truncación rompe batch; `truncation_retry: true` persiste para siguiente run |
 | **Create Project guard** | `dashboard-service.js:285` bloquea sobreescribir proyectos activos |
 | **Dashboard state restore** | `loadInitial()` restaura kanban/status/prompt al hacer F5 |
@@ -886,32 +883,3 @@ $ node runner.js status
 - [`skills/PRODUCT_SHOWCASE.md`](skills/PRODUCT_SHOWCASE.md) - Catálogo de skills disponibles
 - [`system/SKILL_EVOLUTION.md`](system/SKILL_EVOLUTION.md) - Evolución del sistema de skills
 
----
-
-## 🆕 **Output Quality Phase — Resuelto 2026-04-23**
-
-### **🔧 PSKILL-CONTRACT — Skills llegan al executor**
-- `buildExecutionPrompt` inyecta `## Constraints` + `## Output bounds` de cada skill como bloque `--- SKILL GUIDELINES ---`
-- Skills sin frontmatter válido → warning en log, no crash
-- Vendor paths añadidos al search: `skills/vendor/frontend/`, `skills/vendor/backend/`
-- `skills/frontend-html-basic.md` limpiado: JSON template embedded eliminado (generaba schema duplicado en el prompt)
-
-### **🛡️ PSKILL-IMPORT — Barrera de normalización**
-- `normalizeSkillFile()`: agrega frontmatter y secciones faltantes; vendor skills sin `.md` renombrados
-- Post-install hook en `autoskills-adapter.js`: toda skill instalada pasa por normalización antes de ser usable
-- `node runner.js skills validate`: auditoría de valid/warning/error (no bloqueante)
-
-### **🎨 UX Dashboard — PCONFIG-DUP + PGEN-SILENT + PDASH-RESTORE**
-- Un solo input de project root (`#projectPath` en Config); hint "Using: [path]" en prompt tab
-- `initProject` persiste el goal; toast advierte si textarea vacío al generar tasks
-- Config save emite `snapshot:updated` + recarga kanban automáticamente
-
-### **🧪 Testing expandido**
-- `phase_skill_injection.test.js`: verifica inyección de SKILL GUIDELINES y warn en skill no encontrado
-- `phase_skill_import.test.js`: verifica normalización de vendor directory y auditoría
-- `phase_auto_planner_task_sizing.test.js`: verifica bounds CSS en planner
-- `phase_tasks_lock.test.js`: verifica lock optimista en save concurrente
-
----
-
-**Versión:** 3.0 — Output Quality Phase (loop cierra + skills al executor + UX dashboard)

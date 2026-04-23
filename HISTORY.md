@@ -269,3 +269,43 @@ Working tree verified on 2026-04-23 before push; no earlier commit hash captured
 - Current confirmed working areas are summarized in `PROJECT_STATE.md`.
 - Current unresolved items are deliberately tracked in `NEXT_ACTIONS.md` rather than duplicated here.
 - Fresh verification for this documentation pass: `npm test` succeeded on 2026-04-23 and ran all tests listed in `tests/run-all.js`.
+
+### P0 dependency guard — validated in real run (2026-04-23, session 3)
+
+- Symptom: unclear whether `recalculateTaskStates` would correctly block a pending task when its dependency was already `failed` before the run started.
+- Root cause (corrected): the primary protection is `recalculateTaskStates` (pre-batch, line ~1781), which sets `T2.estado = blocked` before `selectBatchForExecution` runs. The mid-batch dep guard at `runner.js:2149` is additional safety for future parallel execution (P6) where a dep could fail mid-batch.
+- Validated: `node runner.js run --root "C:\Users\Windows\Documents\demo4"` with T1=failed, T2=pending+depends_on:[T1] → `[HALT] No executable tasks available`, T2.estado=blocked in tasks.yaml. Zero LLM calls.
+- Note: the `[DEPS GUARD] Blocking T2 — dependency T1 is failed` log message only fires in the mid-batch path (parallel execution). Not observable in sequential mode.
+
+### P8.2 — R10 auto-complete bypass eliminated (2026-04-23, session 3)
+
+- Symptom: tasks with `output: []` bypassed R10 entirely — the executor ran, LLM output was ignored, and a fake marker file at `docs/{task_id}-complete.md` was written as "evidence", marking the task done unconditionally.
+- Root cause: `runner.js:2323-2340` had an explicit auto-complete branch for empty `declaredOutputPaths` that short-circuited evidence validation.
+- Changed: auto-complete block replaced by `throw new Error('Task ... has no declared output files — R10 requires at least one entry in task.output[]')`. Tasks with no declared outputs now fail explicitly, forcing the planner to always declare outputs.
+- Validation: `npm test` green on 2026-04-23. Applied by Codex, verified at runner.js:2323-2328.
+
+### P8.3 — `failed_permanent` excluded from corrective task pool (2026-04-23, session 3)
+
+- Symptom: `linkDependentToCorrective` could re-link tasks in `failed_permanent` state to a new corrective task, allowing them to re-enter the executable pool when the corrective completed.
+- Root cause: `runner.js:1724` guard only skipped `done` tasks, not terminal `failed_permanent`.
+- Changed: guard updated to `task.estado === "done" || task.estado === "failed_permanent"`. One line.
+- Validation: `npm test` green on 2026-04-23.
+
+### P8.4 — `validateTaskSkills` ignores terminal-state tasks (2026-04-23, session 3)
+
+- Symptom: `node runner.js run --root demo4` failed with `Task T1 uses skill not enabled in config: backend` even though T1 was already `failed` and would never be executed. Any renamed or removed skill in a historical failed task would block all future runs.
+- Root cause: `validateTaskSkills` at `runner.js:1387` iterated over all tasks without filtering terminal states.
+- Changed: added `.filter(t => !['done', 'failed', 'split_required'].includes(t.estado))` before the forEach. Terminal-state tasks are never validated.
+- Validation: `npm test` green on 2026-04-23.
+
+### Arch-review — 4 external dependency gaps (2026-04-23, session 3)
+
+Reviewed mem0, LiteLLM, cocoindex, and Arize Phoenix against the real codebase. Verdicts:
+- **mem0**: Discard. Write fallback is already correct (file-first, Engram async mirror). `memoryManager.search()` is never called in the pipeline — no point adding vector search infrastructure.
+- **LiteLLM**: Discard. QA/Reviewer agents are never invoked — the gap is the absent pipeline stage, not the transport layer.
+- **cocoindex**: Discard. `buildExecutionPrompt` already extracts only 2 sections from skill files. Real risk is full input dependency files — addressable with a 2000-char truncation guard using existing `trimLines()`.
+- **Arize Phoenix**: Adapt in 2 phases. Phase 1: add `elapsed_ms` to evidence JSON and `providers/openrouter.js`. Phase 2: OTel/Phoenix when system scales to parallel projects.
+
+### Test isolation established (2026-04-23, session 3)
+
+All future test runs use `--root` flag with isolated directory (e.g., `C:\Users\Windows\Documents\demo4`). Test artifacts cleaned from main project: `smoke-test.txt`, `demo/cli-test.txt`, `system/memory.test.md`, `system/evidence/T1.json`, 10 historical run directories under `system/runs/`.

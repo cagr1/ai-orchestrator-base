@@ -5,11 +5,10 @@ updated: 2026-04-23
 
 # NEXT_ACTIONS.md
 
-## Status: Loop Closed — Output Quality Phase
+## Status: Guards + Integrity Phase completada — Próximo: Output Enhancement
 
-Loop cerrado tres veces. PTASK-BOUND y PINTEGRATION resueltos y validados en run real (2026-04-23).
-Foco actual: calidad de output del executor (PSKILL-CONTRACT) y UX del dashboard (PCONFIG-DUP, PGEN-SILENT, PDASH-RESTORE).
-Resueltos anteriores → `HISTORY.md`.
+Resueltos y validados: loop cierra 3 veces, skills al executor, dep guard, R10 bypass eliminado, skill validation terminal filter, failed_permanent guard.
+Historial completo → `HISTORY.md`.
 
 ---
 
@@ -27,108 +26,20 @@ Sin validación en run real, el fix es hipótesis — no solución.
 
 ## Orden canónico de ejecución
 
-1. **PCONFIG-DUP** — ✓ resuelto (2026-04-23)
-2. **PSKILL-CONTRACT** — ✓ resuelto (2026-04-23), npm test verde
-3. **PSKILL-IMPORT** — ✓ resuelto (2026-04-23)
-4. **PGEN-SILENT + PDASH-RESTORE** — ✓ resuelto (2026-04-23)
-5. **P0** — validar dep guard en run real ← **PRÓXIMO**
-6. **P2-MODEL** — model-per-skill después de PSKILL-CONTRACT
-7. **P8.2 / P8.3** — integrity fixes menores
-8. **P3 / P5 / P7 / P9** — UI/UX polish
-9. **P6** — paralelismo (requiere todos los guards anteriores)
-
----
-
-## PCONFIG-DUP — UX: Tres inputs de project root solapados
-
-**Síntoma confirmado 2026-04-23**: el usuario tiene tres lugares para el project root con propósito ambiguo:
-
-| ID | Ubicación | Estado real |
-|---|---|---|
-| `#projectPath` | Panel Config | Activo — fallback en `createProjectBtn` handler |
-| `#inlineProjectRoot` | Bajo el textarea (prompt tab) | Activo — primera lectura en `createProjectBtn` handler |
-| `#existingProjectPath` + `#existingProjectToggle` | Bajo el textarea | **Dead code** — nunca leído por ningún handler |
-
-**Fix mínimo** (`index.html`):
-1. Eliminar `div.existing-project-row` completo — dead code.
-2. Eliminar `div.project-root-inline` con `#inlineProjectRoot` — duplicado del Config.
-3. `createProjectBtn` handler (línea ~891): usar `#projectPath` directamente. Si vacío → toast "Set project root in Config tab first" + focus en Config.
-4. Agregar bajo el textarea un `<small>` con path activo: `Using: [path] · Edit in Config` — bind a `#projectPath`.
-
-**Prerequisito**: ninguno.
-
----
-
-## PSKILL-CONTRACT — ✓ RESUELTO (2026-04-23)
-
-- `normalizeSkillFile()` en `skill-manager.js:139`
-- Inyección `--- SKILL GUIDELINES ---` en `runner.js:704`
-- Vendor paths añadidos a `skillCandidates` (`runner.js:678-682`)
-- Warns separados: "found but no sections" vs "file not found"
-- `skills/frontend-html-basic.md` limpiado — JSON embedded eliminado
-- `tests/phase_skill_injection.test.js` registrado en `run-all.js`
-- `npm test` verde
-
-→ HISTORY.md para detalles completos.
-
----
-
-## PSKILL-CONTRACT — CONTEXTO ORIGINAL: Skill files nunca llegan al executor LLM
-
-**Problema confirmado**: `buildExecutionPrompt(task)` construye el prompt sin leer el skill file. `callOpenRouter` usa `skill` solo para model routing. Skills como `design-taste.md` (234 líneas) son invisibles al executor — resultado: output mínimo ("Home | Menu | Contact" sin contenido real, confirmado en run 2026-04-23).
-
-**Problema secundario — 5 formatos incompatibles en el mismo repo**:
-| Skill | Formato | Output contract |
-|-------|---------|-----------------|
-| `frontend-html-basic.md` | `#skill-name` header | Sí — JSON explícito |
-| `frontend/design-taste.md` | YAML frontmatter | No |
-| `frontend/animations.md` | Sin identificador | No |
-| `backend/node-api.md` | Sin identificador | No |
-| `vendor/backend/nodejs-backend-patterns` | Sin extensión `.md` | Dead file |
-
-**Tres intervenciones en orden**:
-
-**1. Schema estándar** (cero riesgo):
-Frontmatter obligatorio: `name`, `description`, `output_contract` (enum: `json_files`, `markdown`, `none`).
-Body sections opcionales: `## Context`, `## Constraints`, `## Output bounds`.
-
-**2. Inyección en `buildExecutionPrompt`** ([runner.js:630-702](runner.js#L630)):
-Leer `skills/{task.skill}.md`, inyectar secciones `Constraints` + `Output bounds` como bloque `SKILL GUIDELINES` antes de la task description. Skills sin frontmatter válido → warning en log, no crash.
-
-**3. Normalizar skills existentes**:
-- Agregar frontmatter a todos los skills sin él.
-- Mover/eliminar vendor skills sin extensión `.md`.
-
-**Prerequisito**: PCONFIG-DUP completado (no mezclar cambios de UI y executor en el mismo run de validación).
-
----
-
-## PGEN-SILENT — UX: "Generate Tasks" usa goal previo sin avisar
-
-**Síntoma**: F5 → textarea vacío → "Generate Tasks" → el sistema usa `state.goal` del run anterior sin advertencia.
-
-**Causa raíz**: [dashboard-service.js:519](src/web/services/dashboard-service.js#L519) — fallback en cascada `goal || state.goal || config.prompt`. `initProject` no guarda el prompt en `dashboard.json`.
-
-**Fix en dos partes**:
-1. `initProject` ([dashboard-service.js:308](src/web/services/dashboard-service.js#L308)) — `prompt: goal` al `updateDashboardConfig` call.
-2. `generateTasksBtn` handler ([index.html:930](src/web/public/dashboard/index.html#L930)) — si `goal === ''`, toast de advertencia: "Using saved goal: [X]" antes de proceder.
-
----
-
-## PDASH-RESTORE — UX: Config save no recarga el kanban
-
-**Síntoma**: cambiar `project_root` en Config panel → Save → kanban permanece vacío. Page reload sí funciona.
-
-**Fix mínimo** (2 líneas):
-1. `api.js:106` — `realtime.broadcast('snapshot:updated', dashboard.getSnapshot())` antes de `res.json`.
-2. `index.html:860` — `await loadInitial()` tras toast de éxito del save.
-
----
-
-## P0 — APLICADO, SIN VALIDAR: Dependency guard en runtime
-
-**Patch aplicado**: `runner.js:2081-2099` — dep guard bloquea tarea si dependencia está `failed`.
-**Validación requerida**: forzar que T1 falle en un run. Confirmar en logs: `[DEPS GUARD] Blocking T2 — dependency T1 is failed`. Confirmar en `tasks.yaml`: T2 queda `blocked` con `block_reason: dependency_failed:T1`.
+| # | Item | Estado |
+|---|------|--------|
+| 1 | PCONFIG-DUP | ✓ resuelto 2026-04-23 |
+| 2 | PSKILL-CONTRACT | ✓ resuelto 2026-04-23, npm test verde |
+| 3 | PSKILL-IMPORT | ✓ resuelto 2026-04-23 |
+| 4 | PGEN-SILENT + PDASH-RESTORE | ✓ resuelto 2026-04-23 |
+| 5 | P0 dep guard | ✓ validado en run real 2026-04-23 |
+| 6 | P8.2 / P8.3 / P8.4 | ✓ resuelto 2026-04-23, npm test verde |
+| 7 | **P2-MODEL** | **PRÓXIMO** — Codex |
+| 8 | **QA/Reviewer stage** | Pendiente — Codex (post P2-MODEL) |
+| 9 | **elapsed_ms observabilidad** | Pendiente — Codex (quick win) |
+| 10 | P3 / P5 / P7 / P9 | Pendiente — UI/UX polish |
+| 11 | PPROVIDER-MULTI | Pendiente — Ollama + multi-provider |
+| 12 | P6 paralelismo | Pendiente — requiere todos los guards |
 
 ---
 
@@ -139,65 +50,71 @@ Leer `skills/{task.skill}.md`, inyectar secciones `Constraints` + `Output bounds
 
 ---
 
-## PSKILL-IMPORT — Skills externas no pasan por schema validation
-
-**Estado**: no implementado. Prerequisito: schema de PSKILL-CONTRACT definido (ya está).
-
-**Problema de fondo**: la normalización de PSKILL-CONTRACT es una corrección puntual a los skills existentes. Cualquier skill que entre después por autoskills o CLI externa llega sin schema y rompe la inyección silenciosamente — exactamente el mismo problema que PSKILL-CONTRACT resuelve.
-
-**Contexto real del codebase**:
-- `src/integrations/autoskills-adapter.js` — corre `npx autoskills -y`, instala skills en `skills/vendor/`. No tiene paso de normalización post-install.
-- `src/integrations/skill-manager.js:29` — `collectSkills()` ignora archivos sin `.md` extension. Los 5 archivos en `skills/vendor/` sin extensión (`nodejs-backend-patterns`, `nodejs-best-practices`, `accessibility`, `frontend-design`, `seo`) son actualmente invisibles.
-- `skills/vendor/` — skills instalados por autoskills; nunca tuvieron schema, nunca fueron visibles al runner.
-
-**Tres fuentes de skills que necesitan el mismo schema**:
-| Fuente | Cómo entra | Problema |
-|---|---|---|
-| Manual | Directamente en `skills/` | PSKILL-CONTRACT lo normaliza una vez |
-| Autoskills (`npx autoskills -y`) | `autoskills-adapter.js` → `skills/vendor/` | Sin `.md` → invisibles; sin frontmatter |
-| CLI externa (`npx skills add URL`) | No implementado aún | Necesita el mismo adapter cuando se implemente |
-
-**Solución — 3 capas**:
-
-**Capa 1 — `normalizeSkillFile(filePath)` (función pura reutilizable)**:
-- Si no tiene frontmatter → inferir `name` del filename, `output_contract` del contenido (`json_files` si produce archivos, `markdown` si produce docs).
-- Agregar `## Constraints` y `## Output bounds` como placeholders vacíos si no existen.
-- No inventar reglas — solo estructura. Retornar `{ added_frontmatter, added_sections, renamed }`.
-
-**Capa 2 — Barrera en `autoskills-adapter.js` post-install**:
-- Después de `runAutoskills({ yes: true })`, recorrer `skills/vendor/` y correr `normalizeSkillFile` en cada archivo.
-- Archivos sin `.md` → renombrar a `<name>.md` antes de normalizar (para que `collectSkills` los vea).
-- Loguear qué se normalizó: `[SKILLS] Normalized 3 vendor skills, renamed 2 files`.
-
-**Capa 3 — `node runner.js skills validate` (nuevo CLI command)**:
-- Correr `collectSkills` + validar frontmatter de cada skill.
-- Reportar: `✓ valid`, `⚠ missing output_contract`, `✗ no frontmatter`.
-- Exit code 0 siempre (es auditoría, no bloqueante).
-
-**Prerequisito**: PSKILL-CONTRACT completado — el normalizer usa el mismo schema definido ahí.
-**Desbloquea**: cualquier skill importada por autoskills es automáticamente usable por el executor sin intervención manual.
-
----
-
 ## P2-MODEL — Configurar model-per-skill
 
 **Estado**: no aplicado.
-**Fix**: `system/config.json` — mapear `frontend-html-basic`, `ux` y skills ligeras a un modelo rápido.
-**Prerequisito**: PSKILL-CONTRACT completado — cambiar modelo y prompt al mismo tiempo impide aislar qué cambió el output.
+
+`system/config.json` ya tiene `model_mapping` con todos los skills mapeados a `"base"` y un único modelo configurado en `providers.openrouter.models.base`. El sistema ya soporta múltiples model keys — solo falta poblar el mapping.
+
+**Fix (Codex)**:
+1. En `system/config.json`, agregar al menos 2 model keys en `providers.openrouter.models`:
+   - `"base"` — modelo actual (minimax/minimax-m2.7) para tasks generales
+   - `"fast"` — modelo ligero para tasks simples (ux, frontend-html-basic)
+2. En `model_mapping`, actualizar skills ligeras para apuntar a `"fast"`.
+3. Verificar que `resolveModelForSkill` en `runner.js` ya consume correctamente el mapping (revisar línea ~15 de `providers/openrouter.js`).
+
+**Prerequisito**: PSKILL-CONTRACT completado ✓ — cambiar modelo y skill context al mismo tiempo ya no es ambiguo.
 
 ---
 
-## P8.2 — Auto-complete bypass de R10 para `output: []`
+## QA/Reviewer Stage — Pipeline post-executor
 
-**Líneas**: `runner.js:2262-2279`
-**Fix**: branch auto-complete debe requerir respuesta verificable del LLM, no solo campo vacío.
+**Causa raíz (arch-review 2026-04-23)**: `agents/qa.md` y `agents/reviewer.md` existen pero nunca son invocados. El pipeline runner.js va directo `executor → updateTask(done)`. Cada tarea se marca `done` sin quality-gating — riesgo real de hallucination no detectado.
+
+**Fix estructural (Codex)**: Después de que el executor completa (antes de `updateTask(done)`), agregar dos LLM calls secuenciales:
+1. Prompt con `agents/qa.md` + output del executor → parsear `qa:pass` / `qa:fail`
+2. Si pass → Prompt con `agents/reviewer.md` → parsear `review:pass(score=X)`
+3. Solo si ambos pasan → `updateTask(done)`
+4. Si `qa:fail` → tarea vuelve a `pending` con `retry_reason: qa_failed`
+
+**Prerequisito**: P2-MODEL completado (primero estabilizar el modelo antes de agregar stages).
 
 ---
 
-## P8.3 — `failed_permanent` puede re-entrar al pool ejecutable
+## elapsed_ms — Observabilidad Fase 1 (quick win)
 
-**Líneas**: `runner.js:1720-1742`
-**Fix**: agregar `'failed_permanent'` al guard en línea 1727.
+`providers/openrouter.js` loguea `[LLM START]` y `[LLM END]` pero no calcula ni persiste la latencia.
+
+**Fix (Codex, ~30 min)**:
+- `providers/openrouter.js` línea ~24 (antes del fetch): `const t0 = Date.now()`
+- Al construir el objeto de evidencia en `runner.js`: agregar `elapsed_ms: Date.now() - t0`
+- En `history.log`: incluir `elapsed_ms` en el evento de completion
+
+**Prerequisito**: ninguno. Fix independiente.
+
+---
+
+## PPROVIDER-MULTI — Soporte multi-provider (Ollama + otros)
+
+**Análisis (2026-04-23)**: El sistema ya tiene la abstracción correcta. `providers/openrouter.js` usa fetch con el formato OpenAI-compatible. Ollama expone exactamente el mismo formato en `http://localhost:11434/v1/chat/completions`. La extensión es:
+
+1. Crear `providers/ollama.js` — mismo contrato que `callOpenRouter`:
+   - `base_url`: `http://localhost:11434/v1/chat/completions`
+   - Sin `Authorization` header (o vacío)
+   - Modelos: `qwen2.5-coder:7b`, `codestral:latest`, `llama3.1:8b`
+
+2. En `runner.js`, `runLLM()` despacha según `config.active_provider`:
+   - `openrouter` → `callOpenRouter()`
+   - `ollama` → `callOllama()`
+   - `anthropic` / `openai` → adaptadores futuros
+
+3. En `system/config.json`:
+   - Agregar sección `"ollama"` en `providers`
+   - `active_provider: "ollama"` para runs locales sin API key
+
+**Valor**: runs 100% locales sin costo, privacidad, modelos de código como Codestral/Qwen2.5-Coder que son buenos para las tasks del executor.
+
+**Prerequisito**: P2-MODEL completado (primero consolidar el model mapping antes de agregar providers).
 
 ---
 
@@ -216,11 +133,12 @@ Leer `skills/{task.skill}.md`, inyectar secciones `Constraints` + `Output bounds
 ## P6 — VELOCIDAD: Loop secuencial + spawn overhead
 
 **Secuencia correcta antes de habilitar paralelismo**:
-1. P8.1 — resuelto
-2. PTASK-BOUND — resuelto
+1. P8.1 — ✓ resuelto
+2. PTASK-BOUND — ✓ resuelto
 3. P2-MODEL — model-per-skill (reduce latencia por tarea)
-4. Isolated-result pattern (elimina race condition en writes)
-5. `Promise.all` parallelism
+4. QA/Reviewer stage (valida correctness antes de paralelizar)
+5. Isolated-result pattern (elimina race condition en writes)
+6. `Promise.all` parallelism
 
 ---
 
@@ -238,23 +156,23 @@ Leer `skills/{task.skill}.md`, inyectar secciones `Constraints` + `Output bounds
 
 ## PNORM-PROMPT — DIFERIDO: Validación de task description contra skill contract
 
-**Origen**: idea de prompt-master repo (X.com, 2026-04-23). La propuesta original es un normalizer genérico de inputs libres (`normalizePrompt(rawInput, skillContext)`). Evaluado y acotado para OrchestOS.
-
-**Por qué el normalizer genérico NO encaja en OrchestOS**: el executor no recibe input libre de usuario — recibe una task description generada por el planner LLM. Aplicar heurísticas de "detectar vaguedad" sobre texto ya estructurado es compensar un planner débil, no arreglarlo. La causa raíz de tasks vagas es el prompt del planner (PTASK-BOUND lo ataca) o la ausencia de skill guidelines (PSKILL-CONTRACT lo ataca).
-
-**Lo que SÍ tiene valor**: una función de validación concreta y acotada:
+La propuesta de valor real (acotada para OrchestOS):
 ```
 validateTaskAgainstSkill(task, skillFrontmatter) → { valid, warnings[] }
 ```
-- Verifica que `task.description` menciona el output format que el skill contract exige.
-- Verifica que `task.output[]` contiene al menos un archivo listado en `skill.output_bounds`.
-- Si faltan → loguear `[WARN] Task T3 description missing output format — skill contract requires json_files`.
-- No enriquece silenciosamente. No reescribe. Solo audita y avisa.
+- Verifica que `task.output[]` contiene al menos un archivo dentro de `skill.output_bounds`.
+- Si falta → `[WARN] Task T3 description missing output format — skill contract requires json_files`.
+- No transforma — solo audita.
 
-**Diferencia clave con el prompt original**: no es un normalizer (transforma) — es un validator (avisa). OrchestOS no debe transformar silenciosamente lo que el planner genera; debe hacerlo visible para que el planner mejore.
+**Prerequisito**: PSKILL-CONTRACT ✓. Prioridad baja.
 
-**Prerequisito**: PSKILL-CONTRACT completado (necesita `skillFrontmatter` parseado, que ese PR provee).
-**Prioridad**: baja — PSKILL-CONTRACT ya inyecta los constraints. Este validator añade una capa de observabilidad, no de corrección.
+---
+
+## Arch-Review context — QA/Reviewer y Engram
+
+**QA/Reviewer** (P0 real del arch-review): ver sección "QA/Reviewer Stage" arriba.
+
+**Engram search fallback**: escritura correcta (file-first, Engram async mirror). Búsqueda degrada silenciosamente a substring scan sin indicar al caller. `memoryManager.search()` nunca se invoca en el pipeline actual. Fix mínimo: loguear cuando search() cae al fallback. Conectar al pipeline cuando QA/Reviewer stage esté implementado.
 
 ---
 
@@ -262,7 +180,6 @@ validateTaskAgainstSkill(task, skillFrontmatter) → { valid, warnings[] }
 
 - Path escape check (LLM puede escribir fuera de ROOT_DIR) — sin incidente, defer.
 - `refreshSkills`/`detectSkills` missing `--root` — low impact.
-- P8.4 (crash window lock/saveState) — riesgo bajo hasta paralelismo real.
 - P8.5 (double counter mutation) — low impact con loop secuencial.
 - P8.6 (descomposición de runner.js en módulos) — ventana óptima post-P6.
 - PTASK-TRUE (pre-flight output budget estimator) — infraestructura futura.

@@ -1386,12 +1386,14 @@ const validateTaskIdPattern = (tasks, config) => {
 
 const validateTaskSkills = (tasks, config) => {
   const allowed = getEnabledSkills(config);
-  tasks.forEach(task => {
-    const skill = normalizeSkillName(task.skill);
-    if (!allowed.has(skill)) {
-      throw new Error(`Task ${task.id} uses skill not enabled in config: ${task.skill}`);
-    }
-  });
+  tasks
+    .filter(t => !['done', 'failed', 'split_required'].includes(t.estado))
+    .forEach(task => {
+      const skill = normalizeSkillName(task.skill);
+      if (!allowed.has(skill)) {
+        throw new Error(`Task ${task.id} uses skill not enabled in config: ${task.skill}`);
+      }
+    });
 };
 
 const validatePlannedTasks = (tasksDoc, config) => {
@@ -1720,8 +1722,7 @@ const linkDependentToCorrective = (tasks, failedTaskId, correctiveTaskId) => {
   const updatedDependents = [];
   
   tasks.tasks.forEach(task => {
-    // Skip if already done
-    if (task.estado === "done") {
+    if (task.estado === "done" || task.estado === "failed_permanent") {
       return;
     }
     
@@ -2321,23 +2322,9 @@ const main = async () => {
 
             const declaredOutputPaths = Array.isArray(task.output) ? task.output.filter(Boolean) : [];
             if (declaredOutputPaths.length === 0) {
-              // No declared outputs — task is a side-effect-free step (verification, review, etc.)
-              // Auto-complete: write a completion marker so evidence validation passes.
-              const markerPath = `docs/${task.id}-complete.md`;
-              const markerFile = path.join(ROOT_DIR, markerPath);
-              fs.mkdirSync(path.dirname(markerFile), { recursive: true });
-              fs.writeFileSync(markerFile, `# ${task.title || task.id}\n\nCompleted: ${new Date().toISOString()}\n`, 'utf-8');
-              updateTask(tasksDoc, task.id, { estado: 'done' });
-              anyTaskUpdated = true;
-              const evidenceDir = path.join(SYSTEM_DIR, 'evidence');
-              ensureDir(evidenceDir);
-              fs.writeFileSync(
-                path.join(evidenceDir, `${task.id}.json`),
-                JSON.stringify({ task_id: task.id, files_changed: [markerPath], summary: 'Auto-completed: no declared output files', llm_model: task.skill, timestamp: new Date().toISOString() }, null, 2),
-                'utf-8'
+              throw new Error(
+                `Task ${task.id} has no declared output files — R10 requires at least one entry in task.output[]`
               );
-              console.log(`[EXEC AUTO] ${task.id}: no declared outputs — auto-completed, marker written to ${markerPath}`);
-              continue;
             }
             const validWritableFiles = parsed.files.filter((file) => (
               file &&
