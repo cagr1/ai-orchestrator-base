@@ -674,6 +674,51 @@ const buildExecutionPrompt = (task) => {
     promptParts.push('');
   }
 
+  if (task.skill) {
+    const skillCandidates = [
+      path.join(__dirname, 'skills', `${task.skill}.md`),
+      path.join(__dirname, 'skills', 'frontend', `${task.skill}.md`),
+      path.join(__dirname, 'skills', 'backend', `${task.skill}.md`),
+      path.join(__dirname, 'skills', 'vendor', 'frontend', `${task.skill}.md`),
+      path.join(__dirname, 'skills', 'vendor', 'backend', `${task.skill}.md`)
+    ];
+    const skillPath = skillCandidates.find((candidate) => fs.existsSync(candidate));
+    const extractSection = (content, heading) => {
+      if (!content) return '';
+      const lines = String(content).split(/\r?\n/);
+      const startIndex = lines.findIndex((line) => line.trim() === `## ${heading}`);
+      if (startIndex === -1) return '';
+      let endIndex = lines.length;
+      for (let index = startIndex + 1; index < lines.length; index++) {
+        if (lines[index].startsWith('## ')) {
+          endIndex = index;
+          break;
+        }
+      }
+      return lines.slice(startIndex + 1, endIndex).join('\n').trim();
+    };
+
+    if (skillPath) {
+      const skillContent = readFile(skillPath) || '';
+      const constraintsContent = extractSection(skillContent, 'Constraints');
+      const outputBoundsContent = extractSection(skillContent, 'Output bounds');
+      if (constraintsContent || outputBoundsContent) {
+        promptParts.push(`--- SKILL GUIDELINES (${task.skill}) ---`);
+        if (constraintsContent) {
+          promptParts.push(constraintsContent);
+        }
+        if (outputBoundsContent) {
+          promptParts.push(outputBoundsContent);
+        }
+        promptParts.push('---', '');
+      } else {
+        console.warn(`[WARN] Skill "${task.skill}" found but has no Constraints or Output bounds sections`);
+      }
+    } else {
+      console.warn(`[WARN] Skill file not found for "${task.skill}" — checked ${skillCandidates.length} paths`);
+    }
+  }
+
   promptParts.push(
     '{',
     '  "files": [',
@@ -865,6 +910,19 @@ const saveTasksWithLock = (tasks, expectedHash) => {
   }
   saveTasks(tasks);
   return { ok: true };
+};
+
+const applyTasksSaveFailure = (state, saved, context = {}) => {
+  const reason = saved?.reason || 'tasks_save_failed';
+  state.phase = 'needs_review';
+  state.status = 'needs_review';
+  state.halt_reason = reason;
+  return {
+    taskId: context.taskId || 'tasks_yaml',
+    failureClass: reason,
+    message: context.message || `Could not persist tasks.yaml: ${reason}`,
+    haltReason: reason
+  };
 };
 
 const initializeTasks = (runId) => {
@@ -2434,7 +2492,8 @@ const main = async () => {
           updateTaskMetadata(tasksDoc);
           const saved = saveTasksWithLock(tasksDoc, tasksHash);
           if (!saved.ok) {
-            console.warn('[WARN] Could not save tasks (lock expired or hash mismatch)');
+            hardFailure = applyTasksSaveFailure(state, saved);
+            console.error(`[HALT] Could not save tasks (reason=${hardFailure.failureClass}). State moved to needs_review.`);
           } else {
             tasksHash = computeFileHash(TASKS_FILE);
           }
@@ -3018,6 +3077,7 @@ module.exports = {
   loadTasks,
   saveTasks,
   saveTasksWithLock,
+  applyTasksSaveFailure,
   computeFileHash,
   initializeTasks,
   getTaskById,
@@ -3053,6 +3113,7 @@ module.exports = {
   // Phase 14
   validateEvidenceAgainstTask,
   validatePlannedTasks,
+  buildExecutionPrompt,
   // Phase 17
   validatePlannerAllowed,
   // Phase 18 - Attempts/Max Attempts (Mejora 2)

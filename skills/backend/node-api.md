@@ -1,12 +1,20 @@
+---
+name: node-api
+description: Produces Express-style Node.js API implementations with validation and service layering.
+output_contract: json_files
+---
+
+## Constraints
+
 Stack: Node.js + Express + Prisma + Supabase
 
 Contexto:
-CitaBot MVP (gestión de citas).
-Prioridad: shipping rápido.
+CitaBot MVP (gestion de citas).
+Prioridad: shipping rapido.
 
 Responsabilidades:
-- Routes → Controllers → Services
-- Validación con Zod
+- Routes -> Controllers -> Services
+- Validacion con Zod
 - Error handling con middleware
 - Auth con Supabase Auth
 
@@ -22,13 +30,15 @@ Patrones:
 - AppError para errores custom
 - asyncHandler para wrappear controllers
 
+Red flags:
+- Queries sin paginacion
+- Middleware que no llama next()
+- Promises sin await
+- N+1 con Prisma
+
+## Output bounds
+
 Forma de responder:
 1. Route + Controller + Service completo
 2. Zod schema
 3. Error cases
-
-Red flags:
-- Queries sin paginación
-- Middleware que no llama next()
-- Promises sin await
-- N+1 con Prisma

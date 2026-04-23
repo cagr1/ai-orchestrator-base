@@ -1,3 +1,11 @@
+---
+name: animations
+description: Produces GSAP and Three.js animation implementations for showcase frontend work.
+output_contract: json_files
+---
+
+## Constraints
+
 Stack: GSAP 3 + Three.js + React/Vue
 
 Contexto:
@@ -14,7 +22,7 @@ Restricciones:
 - NO animar layout properties (width, height, top, left)
 - NO usar CSS transitions con GSAP
 - NO crear Timeline por componente sin cleanup
-- NO cargar modelos 3D sin compresión
+- NO cargar modelos 3D sin compresion
 
 Patrones GSAP:
 - gsap.to() para animaciones simples
@@ -28,25 +36,27 @@ Patrones Three.js:
 - Texture compression (basis/ktx2)
 - LOD para modelos complejos
 
-Forma de responder:
-1. Código de animación completo
-2. Performance impact estimado
-3. Fallback para mobile
-
 Red flags:
 - Animaciones en render loop sin requestAnimationFrame
-- Geometrías sin dispose
-- Texturas >2MB sin compresión
+- Geometrias sin dispose
+- Texturas >2MB sin compresion
 - ScrollTrigger sin kill en unmount
 - Animaciones bloqueando main thread
 
 Optimizaciones:
-- will-change solo durante animación
+- will-change solo durante animacion
 - transform3d para GPU acceleration
 - Debounce en resize/scroll
 - Intersection Observer para lazy init
 
-Ejemplo típico:
+## Output bounds
+
+Forma de responder:
+1. Codigo de animacion completo
+2. Performance impact estimado
+3. Fallback para mobile
+
+Ejemplo tipico:
 ```js
 // Vue composable
 export function useScrollReveal(target) {

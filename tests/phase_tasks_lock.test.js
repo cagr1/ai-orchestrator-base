@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const { saveTasksWithLock, computeFileHash } = require('../runner');
+const { saveTasksWithLock, applyTasksSaveFailure, computeFileHash } = require('../runner');
 
 const SYSTEM = path.join(__dirname, '..', 'system');
 const TASKS_FILE = path.join(SYSTEM, 'tasks.yaml');
@@ -75,6 +75,19 @@ metadata:
 
   const result = saveTasksWithLock(doc, hash);
   assert(result.ok === false, 'Expected lock conflict');
+  assert(result.reason === 'tasks_yaml_conflict', 'Expected tasks_yaml_conflict reason');
+
+  const state = {
+    phase: 'execution',
+    status: 'running',
+    halt_reason: null
+  };
+  const hardFailure = applyTasksSaveFailure(state, result);
+  assert(state.phase === 'needs_review', 'Save conflict should move phase to needs_review');
+  assert(state.status === 'needs_review', 'Save conflict should move status to needs_review');
+  assert(state.halt_reason === 'tasks_yaml_conflict', 'Save conflict should preserve halt reason');
+  assert(hardFailure.failureClass === 'tasks_yaml_conflict', 'Hard failure should preserve conflict class');
+  assert(hardFailure.haltReason === 'tasks_yaml_conflict', 'Hard failure should preserve halt reason');
 
   console.log('✓ Optimistic lock prevents overwriting external changes');
 } finally {

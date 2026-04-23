@@ -62,21 +62,13 @@
         <section class="tab-panel active" id="tab-prompt">
           <div class="prompt-pane-full">
             <textarea class="textbox execute-textarea" id="promptInput" placeholder="Write your project goal here...&#10;&#10;Example: Create a landing page for a security company with dark theme."></textarea>
-            <div class="existing-project-row">
-              <label class="existing-project-toggle">
-                <input type="checkbox" id="existingProjectToggle" />
-                <span>Existing project</span>
-              </label>
-              <input type="text" class="textbox" id="existingProjectPath" placeholder="Project path (optional)" style="display:none;" />
-            </div>
-            <div class="project-root-inline" style="margin-top:8px;">
-              <label class="label" style="font-size:12px;color:var(--muted);">Project root path</label>
-              <input type="text" class="textbox" id="inlineProjectRoot" placeholder="e.g. /Users/name/my-project (or leave empty to use Config)" style="font-size:13px;" />
-            </div>
             <div class="execute-actions">
               <button class="btn primary" id="createProjectBtn">Iniciar Proyecto</button>
               <button class="btn accent" id="generateTasksBtn">Generar Plan</button>
               <button class="btn" id="runBtn">Ejecutar ▶</button>
+            </div>
+            <div style="margin-top:6px;">
+              <small id="activeRootHint" style="color:var(--muted);font-size:11px;"></small>
             </div>
           </div>
         </section>
@@ -336,14 +328,7 @@ const promptInput = document.getElementById('promptInput');
       const skillSaveBtn = document.getElementById('skillSaveBtn');
       const projectPath = document.getElementById('projectPath');
       const projectSaveBtn = document.getElementById('projectSaveBtn');
-      const existingProjectToggle = document.getElementById('existingProjectToggle');
-      const existingProjectPath = document.getElementById('existingProjectPath');
 
-      if (existingProjectToggle && existingProjectPath) {
-        existingProjectToggle.addEventListener('change', () => {
-          existingProjectPath.style.display = existingProjectToggle.checked ? 'block' : 'none';
-        });
-      }
 
       const i18n = {
         en: {
@@ -625,6 +610,7 @@ const setKanbanLoading = (loading) => {
         if (data.project?.prompt) promptInput.value = data.project.prompt;
         if (data.project?.project_root) projectPath.value = data.project.project_root;
         if (data.runHistory) renderRunHistory(data.runHistory);
+        updateRootHint();
       };
 
       const loadSkills = async () => {
@@ -858,8 +844,22 @@ const connectRealtime = () => {
           showToast('Error: ' + data.error, 'error');
         } else {
           showToast('Project path saved', 'success');
+          updateRootHint();
         }
       });
+
+      const updateRootHint = () => {
+        const hint = document.getElementById('activeRootHint');
+        if (!hint) return;
+        const path = document.getElementById('projectPath').value.trim();
+        hint.innerHTML = path
+          ? `Using: <strong>${path}</strong> &nbsp;·&nbsp; <a id="hintOpenConfig" href="#" style="color:var(--muted);text-decoration:underline;">Edit in Config</a>`
+          : `<a id="hintOpenConfig" href="#" style="color:var(--accent);text-decoration:underline;">Set project root in Config</a>`;
+        document.getElementById('hintOpenConfig')?.addEventListener('click', (e) => {
+          e.preventDefault();
+          openConfig();
+        });
+      };
 
       // Toast notification function
       const showToast = (message, type = 'info') => {
@@ -888,13 +888,10 @@ const connectRealtime = () => {
         btn.innerHTML = '<span class="spinner sm"></span> Creating...';
         btn.disabled = true;
         try {
-          let projectRoot = document.getElementById('inlineProjectRoot').value.trim();
+          const projectRoot = document.getElementById('projectPath').value.trim();
           if (!projectRoot) {
-            projectRoot = document.getElementById('projectPath').value.trim();
-          }
-          if (!projectRoot) {
-            showToast('Set a project root path in the field below or in Config', 'error');
-            document.getElementById('inlineProjectRoot').focus();
+            showToast('Set a project root path in the Config panel first', 'error');
+            openConfig();
             return;
           }
           const resp = await fetch('/api/v1/project/start', {

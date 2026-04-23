@@ -1,16 +1,16 @@
 {
   "version": "3.0",
-  "run_id": "crea-un-sitio-web-pa-20260421",
+  "run_id": "test-goal-20260423",
   "phase": "planning",
   "iteration": 0,
-  "max_iterations": 20,
+  "max_iterations": 50,
   "status": "running",
   "execution_control": {
     "tasks_completed": 0,
     "session_baseline_completed": 0,
     "max_tasks_per_run": 5,
     "last_checkpoint": 0,
-    "checkpoint_interval": 1,
+    "checkpoint_interval": 5,
     "cooldown_trigger": false,
     "consecutive_failures": 0
   },
@@ -23,6 +23,6 @@
     "locked_by": null,
     "ttl_seconds": 1800
   },
-  "last_updated": "2026-04-22T19:48:15.919Z",
-  "halt_reason": "no_tasks_planned"
+  "last_updated": "2026-04-23T17:13:04.824Z",
+  "halt_reason": null
 }

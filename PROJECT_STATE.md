@@ -1,6 +1,6 @@
 ---
 type: project-state
-updated: 2026-04-22
+updated: 2026-04-23
 ---
 
 # PROJECT_STATE.md
@@ -13,12 +13,16 @@ Make OrchestOS close the execution loop reliably across arbitrary reasonable tas
 
 ---
 
-## Phase: Post-Loop — Quality & Integrity
+## Phase: Post-Loop — Output Quality Phase
 
-**Loop confirmado dos veces**: demo2 (2026-04-21, T1–T6) y demo3 (2026-04-22, minimax-m2.7).
-**Falla activa**: output files no se enlazaban — `index.html` no referenciaba `styles.css` ni `script.js`. Patch aplicado en planner; falta clean rerun de `demo3` antes de cerrar.
+**Loop confirmado tres veces**: demo2 (2026-04-21, T1–T6), demo3 (2026-04-22, minimax-m2.7), demo3-wipe (2026-04-23, clean run).
+**Estado actual**: loop cierra limpio. CSS se divide en sub-tareas (PTASK-BOUND). `index.html` enlaza `styles.css` y `main.js` con 200 (PINTEGRATION). Problema activo: output quality — el executor genera páginas mínimas sin contenido real porque los skill files nunca llegan al LLM (PSKILL-CONTRACT).
 
-Focos activos: (1) validar integración de archivos en run real, (2) validar P0/P1 en run real, (3) P8.1 silent state loss, (4) model-per-skill después de validar integración.
+**Focos activos en orden**:
+1. PCONFIG-DUP — eliminar 3 inputs de project root solapados en el dashboard (quick win de UX)
+2. PSKILL-CONTRACT — inyectar contenido de skill files en `buildExecutionPrompt` (fix de calidad de output)
+3. P0/P1 — validar en run real forzando fallo de T1
+4. P2-MODEL — model-per-skill después de PSKILL-CONTRACT
 
 ---
 
@@ -58,15 +62,19 @@ All writes: path.join(ROOT_DIR, file.path)
 | Loop closes from clean state | First confirmed: 2026-04-21, T1–T6 landing page |
 | `--root` passed by dashboard | `dashboard-service.js:triggerRun` |
 | max_tokens increased to 8000 | `providers/openrouter.js` |
-| Compact retry on truncation | `runner.js:buildExecutionPrompt` — truncation_retry flag |
+| Compact retry on truncation (P1) | `runner.js:2414` — truncation breaks batch; `truncation_retry: true` persists in tasks.yaml for next run |
 | Auto-complete for `output: []` tasks | `runner.js` — writes marker to `docs/{task_id}-complete.md` |
 | `validateEvidenceAgainstTask` skips when output=[] | `runner.js:1378` — guard added |
 | Input file context injected into prompts | `runner.js:buildExecutionPrompt` — reads task.input files |
-| Planner frontend integration guard | `src/integrations/auto-planner.js:155` creates/updates final `index.html` integration task; `src/integrations/auto-planner.js:278` runs before `tasks.yaml` persist; `runner.js:23` normalizes `--root` |
+| Planner frontend integration guard | `src/integrations/auto-planner.js:155` creates/updates final `index.html` integration task; runs before `tasks.yaml` persist |
+| P8.1 tasks.yaml conflict hard halt | `runner.js:870` maps save failure to `needs_review`; `runner.js:2450` turns post-batch save conflict into hard failure; `tests/phase_tasks_lock.test.js:85` verifies `halt_reason=tasks_yaml_conflict` |
+| PTASK-BOUND planner sizing guard | `skills/frontend-html-basic.md:21` defines 100-line CSS/JS bound; `src/integrations/auto-planner.js:214` splits generic `styles.css`; `src/integrations/auto-planner.js:299` makes final integration output `styles.css`; `tests/phase_auto_planner_task_sizing.test.js:45` covers expected split. **Validated 2026-04-23**: T3/T4/T5 con scope description + 100-line budget en clean run. |
+| PINTEGRATION output linking | `auto-planner.js:89,155,278` — T7 integration task depends on all CSS/JS sub-tasks; `index.html` links `styles.css` + `main.js`. **Validated 2026-04-23**: DevTools Network 200 for all assets. |
 | Auto-loop on batch cap | `dashboard-service.js:217` — auto-resume when `status=paused`, exit code 0 |
 | Run button routes to resume when paused | `index.html` — `currentStatus` tracked, endpoint selected dynamically |
-| P0 dependency guard + truncation batch stop | `runner.js:2081` runtime dep check; `runner.js:2414` truncation breaks batch |
-| Create Project guard | `src/web/services/dashboard-service.js:285` blocks existing non-completed projects; `src/web/routes/api.js:119` preserves `project_exists`; `src/web/public/dashboard/index.html:910` tells user to Run/Resume |
+| P0 dependency guard + truncation batch stop | `runner.js:2081` dep check; `runner.js:2414` truncation breaks batch |
+| Create Project guard (PGUARD) | `dashboard-service.js:285` blocks overwrite of active projects; `api.js:119` preserves `project_exists`; `index.html:910` toast orienta a Run/Resume |
+| Dashboard state restoration on page load | `loadInitial()` → `/dashboard/data` → reads `dashboard.json` + `tasks.yaml` → kanban/status/prompt restaurados automáticamente |
 
 ---
 
@@ -74,27 +82,25 @@ All writes: path.join(ROOT_DIR, file.path)
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 1 | Output files generated as isolated artifacts (index.html doesn't link styles/scripts) | High | **PATCH APPLIED, NEEDS CLEAN RERUN** — `src/integrations/auto-planner.js:89` prompt documents dependency inputs; `src/integrations/auto-planner.js:155` enforces CSS/JS inputs and final `index.html` integration task; `tests/phase_auto_planner_integration.test.js:53` covers expected task graph |
-| 2 | `POST /project/start` returns 500 with no error detail (no try/catch in async handler) | High | **FIXED** — try/catch added to api.js 2026-04-21 |
-| 3 | `generateTasks` crashes with ENOENT if `system/` dir doesn't exist in project root | High | **FIXED** — `mkdirSync` added to auto-planner.js 2026-04-21 |
-| 4 | Multi-line goal breaks `execSync` shell command — `runner init` runs without `--root`, writes state.json to wrong dir | High | **FIXED** — `spawnSync` with args array in `initProject`; newlines normalized 2026-04-21 |
-| 5 | `runner.js init` args parsing appends `--root` path value to goal string | Medium | **FIXED** — filter excludes both `--root` flag and its value 2026-04-21 |
-| 6 | `express.json()` body limit not explicit (default 100kb) | Low | **FIXED** — set to 1mb in server.js 2026-04-21 |
-| 6.1 | Create Project overwrites an existing active project without warning | Critical | **FIXED** — `src/web/services/dashboard-service.js:285` expects no overwrite when `system/state.json` or `system/tasks.yaml` exists and status is not `completed`; API/UI preserve `project_exists` at `src/web/routes/api.js:119` and `src/web/public/dashboard/index.html:910` |
-| 7 | Dependency task executes despite its dependency being failed (T2 ran after T1 failed) | Critical | **PATCH APPLIED, UNVALIDATED** — dep guard runner.js:2081 + truncation break :2414 |
-| 8 | T3 compact retry activates but doesn't complete before run closes — CSS truncation persists | High | **PATCH APPLIED, UNVALIDATED** — truncation now breaks batch; retry picked up next run |
-| 9 | Kanban never shows "in_progress" state — no visual signal during execution | Medium | Open — P3 |
-| 10 | No Resume button in dashboard when status=paused | Medium | **FIXED** — auto-loop + smart Run button + CLI message fix 2026-04-22 |
-| 11 | `[NEXT] Ejecuta las tareas` manual instructions printed in AUTO_EXECUTE mode | Medium | Open — P5 |
-| 12 | Speed: 6-8 min per run cycle — sequential execution + spawn overhead + slow model | High | Open — P6 |
-| 13 | Terminal/Run button gives no active signal during LLM call | Medium | Open — P7 |
-| 14 | Realtime feed shows only "snapshot updated" — no task detail | Low | Open — P8 |
-| 15 | `tasks_yaml_conflict` root cause untraced | Medium | Open |
-| 3 | No path escape check — LLM can write outside ROOT_DIR | Medium | Open |
-| 4 | No Resume button in dashboard UI | Low | Open |
-| 5 | `refreshSkills`/`detectSkills` missing `--root` | Low | Open |
-| 6 | Direct CLI without `--root` silently uses orchestrator dir | Medium | **FIXED** — error message now includes `--root "<path>"` 2026-04-22 |
-| 7 | model-per-skill not configured (Codex vs minimax) | Medium | Open |
+| P8.1 | `tasks_yaml_conflict` silently drops all state transitions — tasks.yaml not updated, runner exits clean | Critical | **FIXED** — `runner.js:870` sets `needs_review`; `runner.js:2450` hard-stops post-batch save conflicts; `tests/phase_tasks_lock.test.js:85` covers expected state transition |
+| PTASK-BOUND | Planner generates unbounded CSS/JS tasks — LLM overflows max_tokens, JSON truncated, compact retry fires | High | **FIXED + VALIDATED 2026-04-23** — T3/T4/T5 con scope acotado + 100-line budget en clean run de demo3-wipe |
+| PINTEGRATION | Output files generated as isolated artifacts (`index.html` doesn't link `styles.css` / `script.js`) | High | **FIXED + VALIDATED 2026-04-23** — DevTools Network 200 para `styles.css` y `main.js` en demo3-wipe |
+| PCONFIG-DUP | Tres inputs de project root solapados: `#projectPath` (Config), `#inlineProjectRoot` (prompt tab), `#existingProjectPath` (checkbox "Existing project" — dead code no conectado a ningún handler) | Medium | **Open** — fix: eliminar `#existingProjectPath` + `#existingProjectToggle` (dead code); eliminar `#inlineProjectRoot`; `createProjectBtn` usa `#projectPath` directamente; añadir `<small>` que muestra el path activo con link a Config |
+| P0 | Dependency task executes despite its dependency being failed | Critical | **PATCH APPLIED, UNVALIDATED** — `runner.js:2081` dep guard + `runner.js:2414` truncation break |
+| P1 | Compact retry doesn't complete before run closes — CSS truncation persists across runs | High | **PATCH APPLIED, UNVALIDATED** — truncation breaks batch; retry picked up next run via `truncation_retry: true` |
+| P3 | Kanban never shows "in_progress" state — no visual signal during execution | Medium | Open |
+| P5 | `[NEXT] Ejecuta las tareas` manual message printed in AUTO_EXECUTE mode | Medium | Open |
+| P6 | Speed: 6-8 min per run cycle — sequential loop + spawn overhead + single model | High | Open — P8.1 prerequisite fixed; still requires isolated-result pattern before parallelism |
+| P7 | Terminal/Run button gives no active signal during LLM call | Medium | Open |
+| P8.2 | Auto-complete bypass of R10 for `output: []` tasks | High | Open |
+| P8.3 | `failed_permanent` can re-enter executable pool | Medium | Open |
+| P9 | Realtime feed shows only "snapshot updated" — no task detail | Low | Open |
+| PSKILL-CONTRACT | Skill file content never reaches executor LLM — skills are routing metadata only, not instructions. 5 incompatible formats in repo. Vendor skills have no .md extension and are invisible. | High | **Open — PRÓXIMO** — P2-INTEGRATION-VALIDATE completado 2026-04-23. Síntoma confirmado en run real: executor genera "Home \| Menu \| Contact" sin contenido real porque no recibe ninguna guía de skill. 3-step: schema standard + `buildExecutionPrompt` injection + skill normalization. |
+| PGEN-SILENT | "Generate Tasks" uses previous run's goal silently when textarea is empty — user has no visibility into which goal was used | Medium | Open — `initProject` must persist prompt to `dashboard.json`; frontend must show effective goal in toast |
+| PDASH-RESTORE | Saving new project root via Config panel doesn't reload kanban (requires manual page refresh) | Medium | Open — 2-line fix |
+| PTASK-TRUE | True root fix: pre-flight output budget estimator at plan time | Low | Deferred — infrastructure, post-PTASK-BOUND |
+| — | No path escape check — LLM can write outside ROOT_DIR | Medium | Open — no incident on record |
+| — | `refreshSkills`/`detectSkills` missing `--root` | Low | Open — low impact |
 
 ---
 

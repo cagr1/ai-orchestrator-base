@@ -90,6 +90,7 @@ INSTRUCTIONS:
 - Each task "output" must list at most 2 specific file paths (no directory wildcards like /src or /public). Split large project scaffolds across multiple tasks so each task writes 1–2 files.
 - If any task uses skill "frontend-html-basic", make T1 a minimal bootstrap task that outputs ONLY "index.html". Move CSS/JS files to later tasks (T2+).
 - For that same frontend-html-basic flow, make T2 output ONLY "docs/wireframe.md" and keep it concise (short wireframe summary, not a full design system spec).
+- CSS/JS tasks must be bounded: max 100 lines per output file. Never create one broad "full styles" task. Split CSS into layout, components, typography, and responsive section tasks when needed.
 - For frontend-html-basic projects with separate CSS or JS outputs, create a final integration task that outputs "index.html", depends on the CSS/JS tasks, and lists "index.html" plus those CSS/JS files in "input". This final task must link the generated assets from the HTML.
 
 REQUIRED YAML SCHEMA:
@@ -148,16 +149,118 @@ const ensureListIncludes = (task, field, values) => {
   task[field] = unique([...(Array.isArray(task[field]) ? task[field] : []), ...values]);
 };
 
+const replaceDependency = (task, oldId, newIds) => {
+  const deps = Array.isArray(task.depends_on) ? task.depends_on : [];
+  task.depends_on = unique(deps.flatMap(dep => dep === oldId ? newIds : [dep]));
+};
+
 const isFrontendAssetPath = (filePath = '') => /\.(css|js)$/i.test(filePath);
 
+const isCssPath = (filePath = '') => /\.css$/i.test(filePath);
+
 const taskOutputs = (task) => Array.isArray(task?.output) ? task.output.filter(Boolean) : [];
+
+const CSS_SECTION_ORDER = ['layout', 'components', 'typography', 'responsive'];
+
+const CSS_SECTION_OUTPUTS = {
+  layout: 'styles/layout.css',
+  components: 'styles/components.css',
+  typography: 'styles/typography.css',
+  responsive: 'styles/responsive.css'
+};
+
+const CSS_SECTION_DESCRIPTIONS = {
+  layout: 'Generate only the layout CSS section for page structure, containers, grids, spacing, and major regions. Keep output under 100 lines and do not include component, typography, or responsive rules.',
+  components: 'Generate only the component CSS section for buttons, cards, navigation, forms, and repeated UI elements. Keep output under 100 lines and do not include layout, typography, or responsive rules.',
+  typography: 'Generate only the typography CSS section for font stacks, headings, body text, links, and content rhythm. Keep output under 100 lines and do not include layout, component, or responsive rules.',
+  responsive: 'Generate only the responsive CSS section for breakpoints and mobile/desktop adjustments. Keep output under 100 lines and do not include base layout, component, or typography rules.'
+};
+
+const CSS_SCOPE_KEYWORDS = ['layout', 'components', 'component', 'typography', 'responsive', 'variables', 'tokens'];
+const JS_SCOPE_KEYWORDS = ['interaction', 'interactions', 'navigation', 'form', 'forms', 'animation', 'state'];
+const TASK_SIZE_RISK_WORDS = ['full', 'complete', 'entire', 'whole', 'comprehensive', 'all'];
+
+const hasScopeKeyword = (task, keywords) => {
+  const text = `${task.title || ''} ${task.description || ''} ${taskOutputs(task).join(' ')}`.toLowerCase();
+  return keywords.some(keyword => text.includes(keyword));
+};
+
+const hasTaskSizeRiskWord = (task) => {
+  const text = `${task.title || ''} ${task.description || ''}`.toLowerCase();
+  return TASK_SIZE_RISK_WORDS.some(word => new RegExp(`\\b${word}\\b`).test(text));
+};
+
+const isGenericCssTask = (task) => {
+  const outputs = taskOutputs(task);
+  const cssOutputs = outputs.filter(isCssPath);
+  if (cssOutputs.length === 0) return false;
+  if (cssOutputs.some(output => Object.values(CSS_SECTION_OUTPUTS).includes(output))) return false;
+  return hasTaskSizeRiskWord(task) || !hasScopeKeyword(task, CSS_SCOPE_KEYWORDS);
+};
+
+const isGenericJsTask = (task) => {
+  const outputs = taskOutputs(task).filter(output => /\.js$/i.test(output));
+  return outputs.length > 0 && !hasScopeKeyword(task, JS_SCOPE_KEYWORDS);
+};
+
+const nextTaskIdFactory = (tasks = []) => {
+  let next = tasks.reduce((max, task) => {
+    const match = String(task?.id || '').match(/^T(\d+)$/);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0) + 1;
+  return () => `T${next++}`;
+};
+
+const enforceCSSTaskSizing = (tasks = []) => {
+  const t1 = tasks.find(task => task && task.id === 'T1');
+  if (!t1 || t1.skill !== 'frontend-html-basic') return;
+
+  const getNextTaskId = nextTaskIdFactory(tasks);
+  for (let index = 0; index < tasks.length; index++) {
+    const task = tasks[index];
+    if (!task || task.skill !== 'frontend-html-basic') continue;
+
+    if (isGenericJsTask(task)) {
+      task.description = `${task.description || 'Generate JavaScript interactions.'} Scope this task to one interaction area only and keep the JS output under 100 lines.`;
+      ensureListIncludes(task, 'depends_on', ['T1']);
+      ensureListIncludes(task, 'input', ['index.html']);
+    }
+
+    if (!isGenericCssTask(task)) continue;
+
+    const originalId = task.id;
+    const originalDepends = Array.isArray(task.depends_on) ? task.depends_on : [];
+    const originalInput = Array.isArray(task.input) ? task.input : [];
+    const sectionTasks = CSS_SECTION_ORDER.map((section, sectionIndex) => ({
+      ...task,
+      id: sectionIndex === 0 ? originalId : getNextTaskId(),
+      title: `Create ${section} CSS section`,
+      description: CSS_SECTION_DESCRIPTIONS[section],
+      depends_on: unique([...originalDepends, 'T1']),
+      input: unique([...originalInput, 'index.html', 'docs/wireframe.md']),
+      output: [CSS_SECTION_OUTPUTS[section]]
+    }));
+
+    tasks.splice(index, 1, ...sectionTasks);
+    const sectionIds = sectionTasks.map(sectionTask => sectionTask.id);
+    for (const candidate of tasks) {
+      if (!sectionIds.includes(candidate.id)) {
+        replaceDependency(candidate, originalId, sectionIds);
+      }
+    }
+    index += sectionTasks.length - 1;
+  }
+};
 
 const enforceFrontendIntegrationInputs = (tasks = []) => {
   const t1 = tasks.find(task => task && task.id === 'T1');
   if (!t1 || t1.skill !== 'frontend-html-basic') return;
 
   const htmlPath = 'index.html';
-  const assetTasks = tasks.filter(task => taskOutputs(task).some(isFrontendAssetPath));
+  const assetTasks = tasks.filter(task => {
+    const outputs = taskOutputs(task);
+    return !outputs.includes(htmlPath) && outputs.some(isFrontendAssetPath);
+  });
   if (assetTasks.length === 0) return;
 
   for (const task of assetTasks) {
@@ -169,6 +272,7 @@ const enforceFrontendIntegrationInputs = (tasks = []) => {
 
   const assetTaskIds = assetTasks.map(task => task.id).filter(Boolean);
   const assetOutputs = unique(assetTasks.flatMap(taskOutputs).filter(isFrontendAssetPath));
+  const sectionCssOutputs = assetOutputs.filter(output => Object.values(CSS_SECTION_OUTPUTS).includes(output));
   let integrationTask = tasks.find(task => task.id !== 'T1' && taskOutputs(task).includes(htmlPath));
 
   if (!integrationTask) {
@@ -192,7 +296,10 @@ const enforceFrontendIntegrationInputs = (tasks = []) => {
 
   ensureListIncludes(integrationTask, 'depends_on', assetTaskIds);
   ensureListIncludes(integrationTask, 'input', [htmlPath, ...assetOutputs]);
-  integrationTask.output = [htmlPath];
+  integrationTask.output = sectionCssOutputs.length > 0 ? [htmlPath, 'styles.css'] : [htmlPath];
+  if (sectionCssOutputs.length > 0) {
+    integrationTask.description = 'Merge CSS section files in this order: layout, components, typography, responsive. Write the merged result to styles.css, then update index.html to link styles.css and any generated JavaScript files. Preserve existing HTML content.';
+  }
 };
 
 const generateTasks = async ({ goal, systemDir, config, state }) => {
@@ -275,6 +382,7 @@ COMPLETED TASKS: ${completed.map(t => t.title || t.id).join(', ') || 'none'}`;
 
   enforceFrontendBootstrap(validTasks);
   enforceFrontendT2Sizing(validTasks);
+  enforceCSSTaskSizing(validTasks);
   enforceFrontendIntegrationInputs(validTasks);
   tasksDoc.tasks = validTasks;
   tasksDoc.metadata = {
@@ -299,4 +407,4 @@ COMPLETED TASKS: ${completed.map(t => t.title || t.id).join(', ') || 'none'}`;
   };
 };
 
-module.exports = { generateTasks, enforceFrontendIntegrationInputs };
+module.exports = { generateTasks, enforceCSSTaskSizing, enforceFrontendIntegrationInputs };

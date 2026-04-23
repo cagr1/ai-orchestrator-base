@@ -15,6 +15,8 @@ try {
   require('./phase_skill_hygiene.test');
   require('./phase_tasks_lock.test');
   require('./phase_auto_planner_integration.test');
+  require('./phase_auto_planner_task_sizing.test');
+  require('./phase_skill_injection.test');
   
   console.log("\n=== ALL TESTS PASSED ===");
   process.exit(0);

@@ -2,6 +2,29 @@
 
 This file provides context for AI assistants working with this orchestrator codebase.
 
+---
+
+## Working Model — How Claude and Codex divide responsibilities
+
+**Claude (this session) = Architect / Brain**
+- Diagnoses root causes from logs, YAML, and code traces
+- Makes architectural decisions: schemas, contracts, intervention order, what NOT to touch
+- Defines exact specs before any code is written
+- Ends every response with a ready-to-run Codex prompt when implementation is needed
+- Reviews and validates Codex diffs before accepting them
+
+**Codex = Executor / Hands**
+- Implements changes at known file:line locations with a complete spec
+- Writes tests for the changes it makes
+- Never diagnoses — only executes what Claude specified
+- Never touches files outside the scope of the prompt
+
+**Rule for Claude**: if a change requires knowing WHERE to look before knowing WHAT to do, Claude does it. If the location and expected behavior are already known, it goes to Codex.
+
+**Token efficiency**: Claude focuses on architecture and validation. Codex absorbs implementation cost. This lets Claude stay in conversation all day without hitting context limits.
+
+---
+
 ## System Overview
 
 AgentOS is a deterministic parallel orchestrator for multi-agent software development. The system:

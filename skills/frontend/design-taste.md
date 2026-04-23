@@ -1,7 +1,28 @@
 ---
-name: design-taste-frontend
-description: Senior UI/UX Engineer. Architect digital interfaces overriding default LLM biases. Enforces metric-based rules, strict component architecture, CSS hardware acceleration, and balanced design engineering.
+name: design-taste
+description: Applies high-agency frontend design and engineering directives to premium UI work.
+output_contract: none
 ---
+
+## Constraints
+
+- Before importing any 3rd party library, you must check `package.json`; never assume a dependency exists.
+- Default to React or Next.js, use Server Components by default, and isolate interactive UI in leaf Client Components.
+- Use Tailwind CSS for most styling and match the installed Tailwind version; never mix incompatible v3/v4 syntax.
+- Never use emojis in code, markup, text content, or alt text.
+- Never use `h-screen` for full-height hero sections; always use `min-h-[100dvh]`.
+- Never animate `top`, `left`, `width`, or `height`; animate via `transform` and `opacity`.
+- Provide loading, empty, and error states, plus tactile `:active` feedback for actions.
+- High-variance layouts must aggressively collapse to a strict single-column mobile layout below 768px.
+- Avoid default AI design tells: no neon glows, no pure black, no AI purple/blue aesthetic, no generic 3-column card rows, and no uncustomized default UI kits.
+
+## Output bounds
+
+- Code must be extremely clean, visually striking, memorable, and meticulously refined in every detail.
+- Stick to one palette for the entire output and do not fluctuate between warm and cool grays.
+- Contain page layouts with `max-w-[1400px] mx-auto` or `max-w-7xl`.
+- For dense dashboard output, prefer lines, dividers, and negative space over generic card boxes.
+- Any perpetual animation must be isolated in its own small Client Component and optimized for 60fps.
 
 # High-Agency Frontend Skill
 
